@@ -7,7 +7,7 @@ export async function POST(request: NextRequest) {
     try {
         const user = await requireAuth()
         const body = await request.json()
-        const { action } = body
+        const { action, note } = body
 
         const now = new Date()
         const today = new Date(now)
@@ -41,6 +41,7 @@ export async function POST(request: NextRequest) {
                     date: today,
                     clockIn: now,
                     isHolidayWork,
+                    note: note || null, // 追加: 備考
                 },
             })
 
@@ -49,7 +50,10 @@ export async function POST(request: NextRequest) {
                 action: 'CLOCK_IN',
                 targetType: 'TimeEntry',
                 targetId: entry.id,
-                newValue: { clockIn: now.toISOString() },
+                newValue: {
+                    clockIn: now.toISOString(),
+                    note: note || null,
+                },
                 ipAddress: getIpAddress(request),
             })
 
@@ -79,9 +83,18 @@ export async function POST(request: NextRequest) {
                 )
             }
 
+            // 退勤時の備考追加ロジック
+            let updatedNote = entry.note
+            if (note) {
+                updatedNote = updatedNote ? `${updatedNote} / 【退勤時】${note}` : note
+            }
+
             await prisma.timeEntry.update({
                 where: { id: entry.id },
-                data: { clockOut: now },
+                data: {
+                    clockOut: now,
+                    note: updatedNote,
+                },
             })
 
             await createAuditLog({
@@ -89,7 +102,10 @@ export async function POST(request: NextRequest) {
                 action: 'CLOCK_OUT',
                 targetType: 'TimeEntry',
                 targetId: entry.id,
-                newValue: { clockOut: now.toISOString() },
+                newValue: {
+                    clockOut: now.toISOString(),
+                    note: updatedNote,
+                },
                 ipAddress: getIpAddress(request),
             })
 

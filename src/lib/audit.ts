@@ -13,6 +13,8 @@ export type AuditAction =
     | 'REJECT'
     | 'CONFIRM'
     | 'REVERT'
+    | 'BULK_SEND'
+    | 'RETRY'
 
 export interface AuditLogData {
     userId: string

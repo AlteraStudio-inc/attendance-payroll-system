@@ -15,6 +15,7 @@ export default function EmployeeDashboard() {
     const [loading, setLoading] = useState(true)
     const [punching, setPunching] = useState(false)
     const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+    const [clockNote, setClockNote] = useState('') // 追加: 備考
 
     useEffect(() => {
         fetchTodayStatus()
@@ -41,7 +42,7 @@ export default function EmployeeDashboard() {
             const res = await fetch('/api/employee/clock', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'clock_in' }),
+                body: JSON.stringify({ action: 'clock_in', note: clockNote }),
             })
             const data = await res.json()
             if (!res.ok) throw new Error(data.error)
@@ -61,7 +62,7 @@ export default function EmployeeDashboard() {
             const res = await fetch('/api/employee/clock', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'clock_out' }),
+                body: JSON.stringify({ action: 'clock_out', note: clockNote }),
             })
             const data = await res.json()
             if (!res.ok) throw new Error(data.error)
@@ -71,6 +72,7 @@ export default function EmployeeDashboard() {
             setMessage({ type: 'error', text: err instanceof Error ? err.message : '退勤に失敗しました' })
         } finally {
             setPunching(false)
+            setClockNote('') // 打刻後にクリア
         }
     }
 
@@ -111,6 +113,22 @@ export default function EmployeeDashboard() {
                     </div>
                 </div>
 
+                {/* 備考入力 */}
+                {!todayStatus?.hasClockedOut && (
+                    <div className="mb-4">
+                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                            備考（現場名・出発地点など）※任意
+                        </label>
+                        <input
+                            type="text"
+                            value={clockNote}
+                            onChange={(e) => setClockNote(e.target.value)}
+                            className="input w-full"
+                            placeholder="例: 〇〇作業所直行"
+                        />
+                    </div>
+                )}
+
                 {/* 打刻ボタン */}
                 {!todayStatus?.hasClockedIn ? (
                     <button
@@ -138,19 +156,15 @@ export default function EmployeeDashboard() {
             {/* クイックメニュー */}
             <div className="grid grid-cols-2 gap-3">
                 <Link href="/employee/requests/new" className="card text-center py-6 hover:shadow-md transition-shadow">
-                    <span className="text-2xl mb-2 block">📝</span>
                     <span className="text-sm font-medium text-slate-700">修正申請</span>
                 </Link>
                 <Link href="/employee/requests/leave" className="card text-center py-6 hover:shadow-md transition-shadow">
-                    <span className="text-2xl mb-2 block">🌴</span>
                     <span className="text-sm font-medium text-slate-700">有給申請</span>
                 </Link>
                 <Link href="/employee/attendance" className="card text-center py-6 hover:shadow-md transition-shadow">
-                    <span className="text-2xl mb-2 block">📅</span>
                     <span className="text-sm font-medium text-slate-700">勤怠履歴</span>
                 </Link>
                 <Link href="/employee/payslips" className="card text-center py-6 hover:shadow-md transition-shadow">
-                    <span className="text-2xl mb-2 block">💰</span>
                     <span className="text-sm font-medium text-slate-700">給与明細</span>
                 </Link>
             </div>

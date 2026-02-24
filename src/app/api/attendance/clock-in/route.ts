@@ -4,7 +4,7 @@ import { createAuditLog, getIpAddress } from '@/lib/audit'
 
 export async function POST(request: NextRequest) {
     try {
-        const { employeeCode } = await request.json()
+        const { employeeCode, note } = await request.json()
 
         if (!employeeCode) {
             return NextResponse.json(
@@ -65,6 +65,7 @@ export async function POST(request: NextRequest) {
                 date: today,
                 clockIn: now,
                 isHolidayWork,
+                note: note || null, // 備考を追加
             },
         })
 
@@ -77,6 +78,7 @@ export async function POST(request: NextRequest) {
             newValue: {
                 clockIn: now.toISOString(),
                 isHolidayWork,
+                note: note || null,
             },
             ipAddress: getIpAddress(request),
         })

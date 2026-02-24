@@ -148,6 +148,31 @@ export default function PayrollPage() {
             setProcessing(false)
         }
     }
+    const handleSendBulkEmail = async () => {
+        if (!payrollRun) return
+        if (!confirm('全員に給与明細をメールで送信しますか？\n※メールアドレスが登録されている従業員のみ送信されます。')) return
+
+        setProcessing(true)
+        setError('')
+        setSuccess('')
+
+        try {
+            const res = await fetch('/api/payroll/send-bulk', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ yearMonth: currentMonth }),
+            })
+
+            const data = await res.json()
+            if (!res.ok) throw new Error(data.error)
+
+            setSuccess(`${data.sentCount}件のメール送信が完了しました`)
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'メール送信に失敗しました')
+        } finally {
+            setProcessing(false)
+        }
+    }
 
     const handleGeneratePdf = async (employeeId: string) => {
         setProcessing(true)
@@ -256,13 +281,22 @@ export default function PayrollPage() {
                             </button>
                         )}
                         {payrollRun?.status === 'CONFIRMED' && (
-                            <button
-                                onClick={handleRevert}
-                                disabled={processing}
-                                className="btn btn-danger"
-                            >
-                                差し戻し
-                            </button>
+                            <>
+                                <button
+                                    onClick={handleSendBulkEmail}
+                                    disabled={processing}
+                                    className="btn btn-primary"
+                                >
+                                    全員に明細をメール送信
+                                </button>
+                                <button
+                                    onClick={handleRevert}
+                                    disabled={processing}
+                                    className="btn btn-danger"
+                                >
+                                    差し戻し
+                                </button>
+                            </>
                         )}
                     </div>
                 </div>

@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
             id: employee.id,
             employeeCode: employee.employeeCode,
             name: employee.name,
-            role: employee.role,
+            role: employee.role as 'EMPLOYEE' | 'ADMIN',
         })
 
         // Cookieにセット
@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
     } catch (error) {
         console.error('Login error:', error)
         return NextResponse.json(
-            { error: 'ログイン処理中にエラーが発生しました' },
+            { error: 'エラー詳細: ' + (error instanceof Error ? error.message : String(error)) },
             { status: 500 }
         )
     }

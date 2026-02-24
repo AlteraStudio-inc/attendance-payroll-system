@@ -10,6 +10,7 @@ interface TimeEntry {
     clockOut: string | null
     isHolidayWork: boolean
     isPaidLeave: boolean
+    note: string
 }
 
 export default function AttendancePage() {
@@ -20,11 +21,65 @@ export default function AttendancePage() {
         const now = new Date()
         return now.toISOString().split('T')[0]
     })
-    const [view, setView] = useState<'day' | 'week' | 'month'>('day')
+    const [view, setView] = useState<'day' | 'week' | 'month' | 'employee_monthly'>('day')
+    const [employees, setEmployees] = useState<{ id: string; name: string }[]>([])
+    const [selectedEmployeeId, setSelectedEmployeeId] = useState('')
+    const [downloadingPdf, setDownloadingPdf] = useState(false)
+
+    useEffect(() => {
+        const fetchEmployees = async () => {
+            try {
+                const res = await fetch('/api/employees')
+                if (res.ok) {
+                    const data = await res.json()
+                    setEmployees(data.employees || [])
+                    if (data.employees?.length > 0) setSelectedEmployeeId(data.employees[0].id)
+                }
+            } catch (error) {
+                console.error(error)
+            }
+        }
+        fetchEmployees()
+    }, [])
+
+    const handleDownloadPdf = async () => {
+        if (!selectedEmployeeId) return
+        setDownloadingPdf(true)
+        setError('')
+        try {
+            const res = await fetch('/api/attendance/pdf', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    employeeId: selectedEmployeeId,
+                    yearMonth: selectedDate.substring(0, 7)
+                })
+            })
+            if (!res.ok) {
+                const data = await res.json()
+                throw new Error(data.error || 'PDF生成に失敗しました')
+            }
+
+            const blob = await res.blob()
+            const url = window.URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.href = url
+            a.download = `出勤簿_${selectedDate.substring(0, 7)}.pdf`
+            document.body.appendChild(a)
+            a.click()
+            a.remove()
+            window.URL.revokeObjectURL(url)
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'エラーが発生しました')
+        } finally {
+            setDownloadingPdf(false)
+        }
+    }
 
     const fetchEntries = useCallback(async () => {
         try {
-            const res = await fetch(`/api/attendance?date=${selectedDate}&view=${view}`)
+            const url = `/api/attendance?date=${selectedDate}&view=${view}${view === 'employee_monthly' && selectedEmployeeId ? '&employeeId=' + selectedEmployeeId : ''}`
+            const res = await fetch(url)
             const data = await res.json()
             if (res.ok) {
                 setEntries(data.entries || [])
@@ -34,7 +89,7 @@ export default function AttendancePage() {
         } finally {
             setLoading(false)
         }
-    }, [selectedDate, view])
+    }, [selectedDate, view, selectedEmployeeId])
 
     useEffect(() => {
         fetchEntries()
@@ -69,16 +124,16 @@ export default function AttendancePage() {
                 <h1 className="text-2xl font-bold text-slate-800">勤怠管理</h1>
 
                 <div className="flex gap-2">
-                    {(['day', 'week', 'month'] as const).map((v) => (
+                    {(['day', 'week', 'month', 'employee_monthly'] as const).map((v) => (
                         <button
                             key={v}
                             onClick={() => setView(v)}
                             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${view === v
-                                    ? 'bg-primary-600 text-white'
-                                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                ? 'bg-primary-600 text-white'
+                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                                 }`}
                         >
-                            {v === 'day' ? '日' : v === 'week' ? '週' : '月'}
+                            {v === 'day' ? '日' : v === 'week' ? '週' : v === 'month' ? '月' : '従業員別'}
                         </button>
                     ))}
                 </div>
@@ -88,14 +143,38 @@ export default function AttendancePage() {
 
             {/* 日付選択 */}
             <div className="card">
-                <div className="flex items-center gap-4">
-                    <label className="text-sm font-medium text-slate-700">表示期間:</label>
-                    <input
-                        type="date"
-                        value={selectedDate}
-                        onChange={(e) => setSelectedDate(e.target.value)}
-                        className="input w-auto"
-                    />
+                <div className="flex flex-wrap items-center gap-4">
+                    <div className="flex items-center gap-4">
+                        <label className="text-sm font-medium text-slate-700">表示期間:</label>
+                        <input
+                            type="date"
+                            value={selectedDate}
+                            onChange={(e) => setSelectedDate(e.target.value)}
+                            className="input w-auto"
+                        />
+                    </div>
+                    {view === 'employee_monthly' && (
+                        <div className="flex items-center gap-4 border-l pl-4 border-slate-200">
+                            <label className="text-sm font-medium text-slate-700">対象従業員:</label>
+                            <select
+                                value={selectedEmployeeId}
+                                onChange={(e) => setSelectedEmployeeId(e.target.value)}
+                                className="input w-auto min-w-[200px]"
+                            >
+                                <option value="">選択してください</option>
+                                {employees.map((emp) => (
+                                    <option key={emp.id} value={emp.id}>{emp.name}</option>
+                                ))}
+                            </select>
+                            <button
+                                onClick={handleDownloadPdf}
+                                disabled={downloadingPdf || !selectedEmployeeId}
+                                className="btn btn-primary ml-2"
+                            >
+                                {downloadingPdf ? '生成中...' : '出勤簿PDFを出力'}
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -125,6 +204,7 @@ export default function AttendancePage() {
                                     <th>出勤</th>
                                     <th>退勤</th>
                                     <th>勤務時間</th>
+                                    <th>備考</th>
                                     <th>区分</th>
                                 </tr>
                             </thead>
@@ -144,6 +224,9 @@ export default function AttendancePage() {
                                         </td>
                                         <td className="font-mono">
                                             {entry.isPaidLeave ? '8.0h' : calculateHours(entry.clockIn, entry.clockOut)}
+                                        </td>
+                                        <td className="text-sm text-slate-600 truncate max-w-[150px]" title={entry.note || ''}>
+                                            {entry.note || '-'}
                                         </td>
                                         <td>
                                             {entry.isPaidLeave && <span className="badge badge-approved">有給</span>}

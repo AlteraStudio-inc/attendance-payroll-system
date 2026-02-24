@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAdmin } from '@/lib/auth'
 import { startOfMonth, endOfMonth, eachDayOfInterval, format } from 'date-fns'
+import { logAction, getIpAddress } from '@/lib/audit'
 
 // カレンダー取得
 export async function GET(request: NextRequest) {
@@ -59,7 +60,7 @@ export async function GET(request: NextRequest) {
 // 休日設定の更新
 export async function POST(request: NextRequest) {
     try {
-        await requireAdmin()
+        const user = await requireAdmin()
 
         const body = await request.json()
         const { date, isHoliday, note } = body
@@ -85,6 +86,12 @@ export async function POST(request: NextRequest) {
                 isHoliday: isHoliday ?? true,
                 note: note ?? null,
             },
+        })
+
+        // 監査ログ
+        await logAction(user, 'UPDATE', 'BusinessCalendar', calendar.id, {
+            newValue: { date: format(targetDate, 'yyyy-MM-dd'), isHoliday, note },
+            ipAddress: getIpAddress(request),
         })
 
         return NextResponse.json({ calendar })

@@ -2,13 +2,15 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
-  provider = "prisma-client-js"
+  provider   = "prisma-client-js"
+  engineType = "binary"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
 
 // 従業員テーブル
 model Employee {
@@ -19,6 +21,7 @@ model Employee {
   passwordHash          String   @map("password_hash")
   pinHash               String?  @map("pin_hash")
   role                  String   @default("EMPLOYEE")
+  jobType               String   @default("CONSTRUCTION") @map("job_type") // 追加: 職種 (CONSTRUCTION, NAIL, EYELASH, SUPPORT)
   employmentType        String   @default("FULL_TIME") @map("employment_type")
   wageType              String   @default("FIXED") @map("wage_type")
   hourlyRate            Decimal? @map("hourly_rate")
@@ -41,6 +44,10 @@ model Employee {
   reviewedLeaveRequests PaidLeaveRequest[] @relation("PaidLeaveRequestReviewer")
   modifiedTimeEntries   TimeEntry[]      @relation("TimeEntryModifier")
   confirmedPayrollRuns  PayrollRun[]     @relation("PayrollRunConfirmer")
+  
+  // シフトリレーション
+  shiftRequests         ShiftRequest[]
+  shiftEntries          ShiftEntry[]
 
   @@map("employees")
 }
@@ -52,6 +59,7 @@ model TimeEntry {
   date          DateTime
   clockIn       DateTime  @map("clock_in")
   clockOut      DateTime? @map("clock_out")
+  note          String?   // 追加: 備考（現場名や出発地点など）
   isHolidayWork Boolean   @default(false) @map("is_holiday_work")
   isPaidLeave   Boolean   @default(false) @map("is_paid_leave")
   modifiedById  String?   @map("modified_by")
@@ -204,4 +212,49 @@ model AuditLog {
   user       Employee @relation("AuditLogUser", fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("audit_logs")
+}
+
+// シフト希望（月単位）テーブル
+model ShiftRequest {
+  id            String       @id @default(uuid())
+  employeeId    String       @map("employee_id")
+  yearMonth     String       @map("year_month") // YYYY-MM
+  status        String       @default("PENDING") // PENDING, APPROVED, REJECTED
+  submittedAt   DateTime     @default(now()) @map("submitted_at")
+  reviewedById  String?      @map("reviewed_by")
+  reviewedAt    DateTime?    @map("reviewed_at")
+  createdAt     DateTime     @default(now()) @map("created_at")
+  updatedAt     DateTime     @updatedAt @map("updated_at")
+
+  // リレーション
+  employee      Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  shiftEntries  ShiftEntry[] // この希望申請に含まれる日毎のシフト詳細
+  
+  // レビュアー向けリレーションは今回はシンプルにするためIDのみ保持か、あるいは明示的にリレーションを張るか
+  // reviewedBy    Employee?    @relation("ShiftRequestReviewer", fields: [reviewedById], references: [id])
+
+  @@unique([employeeId, yearMonth]) // 同月一回の申請とする
+  @@map("shift_requests")
+}
+
+// 日別シフトテーブル（希望および確定）
+model ShiftEntry {
+  id             String        @id @default(uuid())
+  shiftRequestId String?       @map("shift_request_id") // 申請に紐づく場合
+  employeeId     String        @map("employee_id")
+  date           DateTime      // 対象日
+  startTime      DateTime?     @map("start_time") // シフト開始予定時間 (nullの場合は休み希望など)
+  endTime        DateTime?     @map("end_time")   // シフト終了予定時間
+  isRest         Boolean       @default(false) @map("is_rest") // 休み希望/休み確定フラグ
+  isConfirmed    Boolean       @default(false) @map("is_confirmed") // 管理者が確定させたか
+  note           String?       // 備考（希望理由や管理者からのコメント）
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  // リレーション
+  employee       Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  shiftRequest   ShiftRequest? @relation(fields: [shiftRequestId], references: [id], onDelete: SetNull)
+
+  @@unique([employeeId, date])
+  @@map("shift_entries")
 }

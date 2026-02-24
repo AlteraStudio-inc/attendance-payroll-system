@@ -10,6 +10,7 @@ interface Employee {
     name: string
     email: string
     role: 'EMPLOYEE' | 'ADMIN'
+    jobType: string
     employmentType: string
     wageType: string
     hourlyRate: number | null
@@ -20,22 +21,25 @@ interface Employee {
     isActive: boolean
 }
 
-export default function EditEmployeePage({ params }: { params: Promise<{ id: string }> }) {
-    const resolvedParams = use(params)
+export default function EditEmployeePage({ params }: { params: { id: string } }) {
     const router = useRouter()
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
     const [error, setError] = useState('')
     const [success, setSuccess] = useState('')
 
+    // params.id は Promiseではなくそのまま展開できる形に修正
+    const employeeId = params.id
+
     const [form, setForm] = useState({
         name: '',
         email: '',
         password: '',
         pin: '',
-        role: 'EMPLOYEE' as const,
-        employmentType: 'FULL_TIME' as const,
-        wageType: 'FIXED' as const,
+        role: 'EMPLOYEE' as 'EMPLOYEE' | 'ADMIN',
+        jobType: 'OTHER' as 'CONSTRUCTION' | 'NAIL' | 'EYELASH' | 'SUPPORT' | 'OTHER',
+        employmentType: 'FULL_TIME' as 'FULL_TIME' | 'CONTRACT' | 'PART_TIME' | 'HOURLY',
+        wageType: 'FIXED' as 'FIXED' | 'HOURLY',
         hourlyRate: '',
         monthlySalary: '',
         minimumWage: '1000',
@@ -47,7 +51,7 @@ export default function EditEmployeePage({ params }: { params: Promise<{ id: str
     useEffect(() => {
         const fetchEmployee = async () => {
             try {
-                const res = await fetch(`/api/employees/${resolvedParams.id}`)
+                const res = await fetch(`/api/employees/${employeeId}`)
                 const data = await res.json()
 
                 if (!res.ok) throw new Error(data.error)
@@ -59,8 +63,9 @@ export default function EditEmployeePage({ params }: { params: Promise<{ id: str
                     password: '',
                     pin: '',
                     role: emp.role,
-                    employmentType: emp.employmentType as 'FULL_TIME',
-                    wageType: emp.wageType as 'FIXED',
+                    jobType: emp.jobType as 'CONSTRUCTION' | 'NAIL' | 'EYELASH' | 'SUPPORT' | 'OTHER',
+                    employmentType: emp.employmentType as 'FULL_TIME' | 'CONTRACT' | 'PART_TIME' | 'HOURLY',
+                    wageType: emp.wageType as 'FIXED' | 'HOURLY',
                     hourlyRate: emp.hourlyRate?.toString() || '',
                     monthlySalary: emp.monthlySalary?.toString() || '',
                     minimumWage: emp.minimumWage.toString(),
@@ -76,7 +81,7 @@ export default function EditEmployeePage({ params }: { params: Promise<{ id: str
         }
 
         fetchEmployee()
-    }, [resolvedParams.id])
+    }, [employeeId])
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value, type } = e.target
@@ -97,6 +102,7 @@ export default function EditEmployeePage({ params }: { params: Promise<{ id: str
                 name: form.name,
                 email: form.email,
                 role: form.role,
+                jobType: form.jobType,
                 employmentType: form.employmentType,
                 wageType: form.wageType,
                 minimumWage: parseFloat(form.minimumWage),
@@ -110,7 +116,7 @@ export default function EditEmployeePage({ params }: { params: Promise<{ id: str
             if (form.password) payload.password = form.password
             if (form.pin) payload.pin = form.pin
 
-            const res = await fetch(`/api/employees/${resolvedParams.id}`, {
+            const res = await fetch(`/api/employees/${employeeId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
@@ -231,12 +237,22 @@ export default function EditEmployeePage({ params }: { params: Promise<{ id: str
                 <div className="space-y-4">
                     <h2 className="text-lg font-semibold text-slate-700 border-b pb-2">雇用情報</h2>
 
-                    <div className="grid sm:grid-cols-2 gap-4">
+                    <div className="grid sm:grid-cols-3 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-slate-700 mb-1">権限</label>
                             <select name="role" value={form.role} onChange={handleChange} className="input">
                                 <option value="EMPLOYEE">従業員</option>
                                 <option value="ADMIN">管理者</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">職種</label>
+                            <select name="jobType" value={form.jobType} onChange={handleChange} className="input">
+                                <option value="CONSTRUCTION">建設</option>
+                                <option value="NAIL">ネイル</option>
+                                <option value="EYELASH">アイラッシュ</option>
+                                <option value="SUPPORT">就労支援</option>
+                                <option value="OTHER">その他</option>
                             </select>
                         </div>
                         <div>

@@ -2,12 +2,12 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 
 export default function LoginPage() {
     const router = useRouter()
     const [employeeCode, setEmployeeCode] = useState('')
     const [password, setPassword] = useState('')
-    const [loginType, setLoginType] = useState<'password' | 'pin'>('password')
     const [error, setError] = useState('')
     const [loading, setLoading] = useState(false)
 
@@ -25,7 +25,7 @@ export default function LoginPage() {
                 body: JSON.stringify({
                     employeeCode,
                     password,
-                    loginType,
+                    loginType: 'password',
                 }),
             })
 
@@ -49,98 +49,76 @@ export default function LoginPage() {
     }
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-600 to-primary-800 p-4">
-            <div className="card max-w-md w-full">
-                <div className="text-center mb-8">
-                    <h1 className="text-2xl font-bold text-slate-800">ログイン</h1>
-                    <p className="text-slate-500 mt-2">勤怠・給与管理システム</p>
-                </div>
+        <div className="min-h-screen flex items-center justify-center bg-slate-100 p-4">
+            <div className="max-w-md w-full">
 
-                {/* ログインタイプ切り替え */}
-                <div className="flex mb-6 bg-slate-100 rounded-lg p-1">
-                    <button
-                        type="button"
-                        onClick={() => setLoginType('password')}
-                        className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${loginType === 'password'
-                                ? 'bg-white text-primary-700 shadow-sm'
-                                : 'text-slate-600 hover:text-slate-800'
-                            }`}
-                    >
-                        パスワード
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => setLoginType('pin')}
-                        className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${loginType === 'pin'
-                                ? 'bg-white text-primary-700 shadow-sm'
-                                : 'text-slate-600 hover:text-slate-800'
-                            }`}
-                    >
-                        PIN
-                    </button>
-                </div>
-
-                <form onSubmit={handleSubmit} className="space-y-5">
-                    {error && (
-                        <div className="alert alert-error">
-                            {error}
+                {/* ログインカード */}
+                <div className="bg-white rounded-2xl shadow-md p-8 border border-slate-200">
+                    <div className="text-center mb-8">
+                        <div className="w-16 h-16 rounded-full bg-primary-100 flex items-center justify-center mx-auto mb-4">
+                            <svg className="w-8 h-8 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                            </svg>
                         </div>
-                    )}
-
-                    <div>
-                        <label htmlFor="employeeCode" className="block text-sm font-medium text-slate-700 mb-1">
-                            従業員コード
-                        </label>
-                        <input
-                            id="employeeCode"
-                            type="text"
-                            value={employeeCode}
-                            onChange={(e) => setEmployeeCode(e.target.value)}
-                            className="input"
-                            placeholder="例: EMP001"
-                            required
-                            autoComplete="username"
-                        />
+                        <h1 className="text-2xl font-bold text-slate-800">ログイン</h1>
+                        <p className="text-slate-500 mt-1 text-sm">管理画面・マイページにアクセス</p>
                     </div>
 
-                    <div>
-                        <label htmlFor="password" className="block text-sm font-medium text-slate-700 mb-1">
-                            {loginType === 'password' ? 'パスワード' : 'PIN'}
-                        </label>
-                        <input
-                            id="password"
-                            type={loginType === 'pin' ? 'tel' : 'password'}
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            className="input"
-                            placeholder={loginType === 'pin' ? '4桁のPIN' : 'パスワード'}
-                            required
-                            autoComplete={loginType === 'pin' ? 'one-time-code' : 'current-password'}
-                            pattern={loginType === 'pin' ? '[0-9]{4,6}' : undefined}
-                            inputMode={loginType === 'pin' ? 'numeric' : undefined}
-                        />
-                    </div>
-
-                    <button
-                        type="submit"
-                        disabled={loading}
-                        className="btn btn-primary w-full"
-                    >
-                        {loading ? (
-                            <span className="flex items-center justify-center gap-2">
-                                <span className="spinner w-5 h-5"></span>
-                                ログイン中...
-                            </span>
-                        ) : (
-                            'ログイン'
+                    <form onSubmit={handleSubmit} className="space-y-5">
+                        {error && (
+                            <div className="alert alert-error">
+                                {error}
+                            </div>
                         )}
-                    </button>
-                </form>
 
-                <div className="mt-6 text-center">
-                    <a href="/kiosk" className="text-primary-600 hover:text-primary-700 text-sm">
-                        打刻専用画面へ →
-                    </a>
+                        <div>
+                            <label htmlFor="employeeCode" className="block text-sm font-medium text-slate-700 mb-1">
+                                従業員コード
+                            </label>
+                            <input
+                                id="employeeCode"
+                                type="text"
+                                value={employeeCode}
+                                onChange={(e) => setEmployeeCode(e.target.value)}
+                                className="input"
+                                placeholder="例: ADMIN001"
+                                required
+                                autoComplete="username"
+                                autoFocus
+                            />
+                        </div>
+
+                        <div>
+                            <label htmlFor="password" className="block text-sm font-medium text-slate-700 mb-1">
+                                パスワード
+                            </label>
+                            <input
+                                id="password"
+                                type="password"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                className="input"
+                                placeholder="パスワードを入力"
+                                required
+                                autoComplete="current-password"
+                            />
+                        </div>
+
+                        <button
+                            type="submit"
+                            disabled={loading}
+                            className="btn btn-primary w-full py-3"
+                        >
+                            {loading ? (
+                                <span className="flex items-center justify-center gap-2">
+                                    <span className="spinner w-5 h-5"></span>
+                                    ログイン中...
+                                </span>
+                            ) : (
+                                'ログイン'
+                            )}
+                        </button>
+                    </form>
                 </div>
             </div>
         </div>

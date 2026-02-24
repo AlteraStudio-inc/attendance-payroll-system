@@ -218,6 +218,12 @@ export async function POST(request: NextRequest) {
                 }
             }
 
+            // 監査ログ
+            await logAction(user, 'BULK_SEND', 'EmailLog', yearMonth, {
+                newValue: { yearMonth, sentCount: sent, failedCount: failed },
+                ipAddress: getIpAddress(request),
+            })
+
             return NextResponse.json({ success: true, sent, failed })
         } else if (action === 'retry') {
             // 再送信
@@ -280,6 +286,13 @@ export async function POST(request: NextRequest) {
                 })
 
                 await markEmailSent(logId)
+
+                // 監査ログ
+                await logAction(user, 'RETRY', 'EmailLog', logId, {
+                    newValue: { status: 'SENT' },
+                    ipAddress: getIpAddress(request),
+                })
+
                 return NextResponse.json({ success: true })
             } catch (error) {
                 const errorMessage = error instanceof Error ? error.message : 'Unknown error'

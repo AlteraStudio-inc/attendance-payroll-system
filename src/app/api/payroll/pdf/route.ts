@@ -38,6 +38,7 @@ export async function POST(request: NextRequest) {
         const data: PayslipData = {
             employeeCode: payrollItem.employee.employeeCode,
             employeeName: payrollItem.employee.name,
+            jobType: payrollItem.employee.jobType,
             yearMonth,
             workHours: Number(payrollItem.workHours),
             overtimeHours: Number(payrollItem.overtimeHours),
@@ -69,7 +70,7 @@ export async function POST(request: NextRequest) {
             // PDFを生成して返す
             const pdfBuffer = await generatePayslipPdf(data)
 
-            return new NextResponse(pdfBuffer, {
+            return new NextResponse(new Uint8Array(pdfBuffer), {
                 headers: {
                     'Content-Type': 'application/pdf',
                     'Content-Disposition': `inline; filename="${data.employeeCode}_${yearMonth}.pdf"`,
@@ -82,7 +83,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: error.message }, { status: 403 })
         }
         return NextResponse.json(
-            { error: 'PDF生成中にエラーが発生しました' },
+            { error: 'PDF生成中にエラーが発生しました: ' + (error instanceof Error ? error.message : String(error)) },
             { status: 500 }
         )
     }

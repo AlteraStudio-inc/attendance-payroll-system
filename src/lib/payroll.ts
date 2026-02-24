@@ -63,14 +63,14 @@ export async function calculateMonthlyPayroll(
     const startDate = startOfMonth(new Date(year, month - 1))
     const endDate = endOfMonth(startDate)
 
-    // 対象月の営業日数を取得
+    // 対象月の営業日数を取得 (建設部門向け)
     const holidays = await prisma.businessCalendar.findMany({
         where: {
             date: { gte: startDate, lte: endDate },
             isHoliday: true,
         },
     })
-    const holidayDates = new Set(
+    const companyHolidayDates = new Set(
         holidays.map((h) => h.date.toISOString().split('T')[0])
     )
 
@@ -81,6 +81,12 @@ export async function calculateMonthlyPayroll(
             timeEntries: {
                 where: {
                     date: { gte: startDate, lte: endDate },
+                },
+            },
+            shiftEntries: {
+                where: {
+                    date: { gte: startDate, lte: endDate },
+                    isConfirmed: true, // 確定済みシフトのみ
                 },
             },
         },
@@ -103,16 +109,47 @@ export async function calculateMonthlyPayroll(
             }
 
             const hours = calculateHours(entry.clockIn, entry.clockOut)
-            if (entry.isHolidayWork) {
+            // 休日出勤の判定
+            // 建設部門(CONSTRUCTION)は会社カレンダー基準、それ以外はシフトでisRest=trueの日が休日
+            let isHoliday = false
+            const dateStr = entry.date.toISOString().split('T')[0]
+            
+            if (employee.jobType === 'CONSTRUCTION') {
+                isHoliday = companyHolidayDates.has(dateStr)
+            } else {
+                const shiftForDay = employee.shiftEntries.find(
+                    (s) => s.date.toISOString().split('T')[0] === dateStr
+                )
+                // シフトが存在しない日、またはシフト上で休みとなっている日を休日扱い
+                isHoliday = !shiftForDay || shiftForDay.isRest
+            }
+
+            if (entry.isHolidayWork || isHoliday) {
                 totalHolidayHours += hours
             } else {
                 totalWorkHours += hours
             }
         }
 
+        // 所定労働時間の計算
+        let standardMonthlyHours = SETTINGS.STANDARD_MONTHLY_HOURS
+        if (employee.jobType !== 'CONSTRUCTION') {
+            // 建設部門以外は、確定シフトの合計時間を所定労働時間とする
+            let shiftTotalHours = 0
+            for (const shift of employee.shiftEntries) {
+                if (!shift.isRest && shift.startTime && shift.endTime) {
+                    shiftTotalHours += calculateHours(shift.startTime, shift.endTime)
+                }
+            }
+            // シフト時間が0の場合は通常の標準時間を採用（未提出等のフォールバック）
+            if (shiftTotalHours > 0) {
+                standardMonthlyHours = shiftTotalHours
+            }
+        }
+
         // 残業時間計算
-        const regularHours = Math.min(totalWorkHours, SETTINGS.STANDARD_MONTHLY_HOURS)
-        let overtimeHours = Math.max(0, totalWorkHours - SETTINGS.STANDARD_MONTHLY_HOURS)
+        const regularHours = Math.min(totalWorkHours, standardMonthlyHours)
+        let overtimeHours = Math.max(0, totalWorkHours - standardMonthlyHours)
 
         // 基本給計算
         let baseSalary: number
@@ -135,7 +172,7 @@ export async function calculateMonthlyPayroll(
         } else {
             // 固定給制
             baseSalary = toNumber(employee.monthlySalary)
-            const hourlyRate = baseSalary / SETTINGS.STANDARD_MONTHLY_HOURS
+            const hourlyRate = baseSalary / standardMonthlyHours
 
             // みなし残業制の場合
             if (employee.deemedOvertimeEnabled) {
@@ -151,7 +188,7 @@ export async function calculateMonthlyPayroll(
             holidayPay = totalHolidayHours * hourlyRate * SETTINGS.HOLIDAY_RATE
 
             // 最低賃金チェック（時給換算）
-            const effectiveHourlyRate = baseSalary / SETTINGS.STANDARD_MONTHLY_HOURS
+            const effectiveHourlyRate = baseSalary / standardMonthlyHours
             const minimumWage = toNumber(employee.minimumWage)
             if (effectiveHourlyRate < minimumWage) {
                 warnings.push(

@@ -4,7 +4,7 @@ import { createAuditLog, getIpAddress } from '@/lib/audit'
 
 export async function POST(request: NextRequest) {
     try {
-        const { employeeCode } = await request.json()
+        const { employeeCode, note } = await request.json()
 
         if (!employeeCode) {
             return NextResponse.json(
@@ -59,10 +59,19 @@ export async function POST(request: NextRequest) {
             )
         }
 
+        // 既存のnoteがある場合は、退勤時のnoteを追記する
+        let updatedNote = existingEntry.note
+        if (note) {
+            updatedNote = updatedNote ? `${updatedNote} / 【退勤時】${note}` : note
+        }
+
         // 退勤打刻を更新
         const updatedEntry = await prisma.timeEntry.update({
             where: { id: existingEntry.id },
-            data: { clockOut: now },
+            data: {
+                clockOut: now,
+                note: updatedNote,
+            },
         })
 
         // 監査ログ

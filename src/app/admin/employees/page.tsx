@@ -9,6 +9,7 @@ interface Employee {
     name: string
     email: string
     role: 'EMPLOYEE' | 'ADMIN'
+    jobType: string
     employmentType: string
     wageType: string
     hourlyRate: number | null
@@ -29,6 +30,14 @@ export default function EmployeesPage() {
         CONTRACT: '契約社員',
         PART_TIME: 'パート',
         HOURLY: 'アルバイト',
+    }
+
+    const jobTypeLabels: Record<string, string> = {
+        CONSTRUCTION: '建設',
+        NAIL: 'ネイル',
+        EYELASH: 'アイラッシュ',
+        SUPPORT: '就労支援',
+        OTHER: 'その他',
     }
 
     const wageTypeLabels: Record<string, string> = {
@@ -132,6 +141,7 @@ export default function EmployeesPage() {
                                     <th>コード</th>
                                     <th>氏名</th>
                                     <th>メール</th>
+                                    <th>職種</th>
                                     <th>雇用形態</th>
                                     <th>給与形態</th>
                                     <th>状態</th>
@@ -142,8 +152,11 @@ export default function EmployeesPage() {
                                 {employees.map((emp) => (
                                     <tr key={emp.id} className={!emp.isActive ? 'opacity-50' : ''}>
                                         <td className="font-mono">{emp.employeeCode}</td>
-                                        <td className="font-medium">{emp.name}</td>
+                                        <td className="font-medium">
+                                            {emp.name}
+                                        </td>
                                         <td className="text-slate-600">{emp.email}</td>
+                                        <td>{jobTypeLabels[emp.jobType] || 'その他'}</td>
                                         <td>{employmentTypeLabels[emp.employmentType]}</td>
                                         <td>
                                             {wageTypeLabels[emp.wageType]}

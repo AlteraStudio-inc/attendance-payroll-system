@@ -8,31 +8,40 @@ const COMPANY_NAME = process.env.COMPANY_NAME || '株式会社サンプル'
 const STORAGE_PATH = process.env.PAYSLIP_STORAGE_PATH || './data/payslips'
 
 export interface PayslipData {
-    employeeCode: string
-    employeeName: string
-    yearMonth: string
-    workHours: number
-    overtimeHours: number
-    holidayHours: number
-    baseSalary: number
-    overtimePay: number
-    holidayPay: number
-    deemedOvertimePay: number
-    grossSalary: number
-    socialInsurance: number
-    employmentInsurance: number
-    incomeTax: number
-    totalDeductions: number
-    netSalary: number
+  employeeCode: string
+  employeeName: string
+  jobType?: string // 職種 (CONSTRUCTION, NAIL, EYELASH, SUPPORT)
+  yearMonth: string
+  workHours: number
+  overtimeHours: number
+  holidayHours: number
+  baseSalary: number
+  overtimePay: number
+  holidayPay: number
+  deemedOvertimePay: number
+  grossSalary: number
+  socialInsurance: number
+  employmentInsurance: number
+  incomeTax: number
+  totalDeductions: number
+  netSalary: number
 }
 
 // 給与明細HTMLテンプレート
 function generatePayslipHtml(data: PayslipData): string {
-    const formatCurrency = (amount: number) => '¥' + amount.toLocaleString()
-    const [year, month] = data.yearMonth.split('-')
-    const issueDate = format(new Date(), 'yyyy年M月d日', { locale: ja })
+  const formatCurrency = (amount: number) => amount === 0 ? '0' : amount.toLocaleString()
+  const [year, month] = data.yearMonth.split('-')
 
-    return `
+  // 職種に応じた表示用部署名
+  let jobTitle = '総務部・経理課'
+  if (data.jobType === 'CONSTRUCTION') jobTitle = '建設部門'
+  else if (data.jobType === 'NAIL') jobTitle = 'ネイルサロン部門'
+  else if (data.jobType === 'EYELASH') jobTitle = 'アイラッシュ部門'
+  else if (data.jobType === 'SUPPORT') jobTitle = '就労支援部門'
+
+  const workDays = Math.ceil(data.workHours / 8) || 20
+
+  return `
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -45,218 +54,281 @@ function generatePayslipHtml(data: PayslipData): string {
     }
     body {
       font-family: 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif;
-      font-size: 12px;
-      line-height: 1.5;
-      padding: 20mm;
+      font-size: 11px;
+      line-height: 1.2;
+      padding: 15mm;
       background: white;
-    }
-    .container {
-      max-width: 170mm;
-      margin: 0 auto;
-    }
-    .header {
-      text-align: center;
-      margin-bottom: 20px;
-      padding-bottom: 15px;
-      border-bottom: 2px solid #2563eb;
-    }
-    .header h1 {
-      font-size: 24px;
-      color: #1e40af;
-      margin-bottom: 5px;
-    }
-    .header .period {
-      font-size: 18px;
-      font-weight: bold;
-    }
-    .meta {
-      display: flex;
-      justify-content: space-between;
-      margin-bottom: 20px;
-    }
-    .meta-item {
-      font-size: 14px;
-    }
-    .meta-item .label {
-      color: #666;
-      font-size: 11px;
-    }
-    .meta-item .value {
-      font-weight: bold;
-    }
-    .section {
-      margin-bottom: 20px;
-    }
-    .section-title {
-      background: #2563eb;
-      color: white;
-      padding: 8px 12px;
-      font-size: 14px;
-      font-weight: bold;
-      margin-bottom: 10px;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-    }
-    table th, table td {
-      padding: 8px 12px;
-      text-align: left;
-      border-bottom: 1px solid #ddd;
-    }
-    table th {
-      background: #f1f5f9;
-      font-weight: normal;
-      width: 40%;
-    }
-    table td {
-      text-align: right;
-      font-weight: bold;
-    }
-    .summary {
-      margin-top: 30px;
-      padding: 20px;
-      background: #f8fafc;
-      border: 2px solid #2563eb;
-    }
-    .summary-row {
-      display: flex;
-      justify-content: space-between;
-      padding: 10px 0;
-      border-bottom: 1px solid #e2e8f0;
-    }
-    .summary-row:last-child {
-      border-bottom: none;
-    }
-    .summary-row.total {
-      font-size: 18px;
-      font-weight: bold;
-      color: #2563eb;
-      padding-top: 15px;
-    }
-    .footer {
-      margin-top: 30px;
-      text-align: right;
-      font-size: 11px;
-      color: #666;
+      color: #000;
     }
     .company {
-      font-size: 14px;
-      font-weight: bold;
-      color: #333;
+      text-align: right;
+      margin-bottom: 20px;
+      font-size: 12px;
     }
+    .title-box {
+      border: 2px solid #000;
+      text-align: center;
+      padding: 10px;
+      font-size: 20px;
+      font-weight: bold;
+      width: 80%;
+      margin: 0 auto 30px auto;
+      background-color: #f0f7ff;
+    }
+    .info-container {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+    .info-table {
+      border-collapse: collapse;
+      border: 2px solid #000;
+    }
+    .info-table th, .info-table td {
+      border: 1px solid #000;
+      padding: 5px 10px;
+      text-align: center;
+      height: 24px;
+    }
+    .info-table th {
+      background-color: #f0f7ff;
+      font-weight: normal;
+    }
+    .main-table {
+      width: 100%;
+      border-collapse: collapse;
+      border: 2px solid #000;
+      margin-bottom: 12px;
+    }
+    .main-table th, .main-table td {
+      border: 1px solid #000;
+      padding: 4px;
+      text-align: right;
+      height: 26px;
+    }
+    .main-table th {
+      background-color: #f0f7ff;
+      font-weight: normal;
+      text-align: center;
+    }
+    .side-th {
+      writing-mode: vertical-rl;
+      text-orientation: upright;
+      letter-spacing: 5px;
+      width: 5%;
+      text-align: center !important;
+      padding: 10px 0 !important;
+    }
+    .col-header { width: 19%; }
   </style>
 </head>
 <body>
-  <div class="container">
-    <div class="header">
-      <h1>給 与 明 細 書</h1>
-      <div class="period">${year}年${month}月分</div>
-    </div>
+  <div class="company">${COMPANY_NAME}</div>
+  <div class="title-box">給与明細書（${year}年${Number(month)}月分）</div>
 
-    <div class="meta">
-      <div class="meta-item">
-        <div class="label">従業員コード</div>
-        <div class="value">${data.employeeCode}</div>
-      </div>
-      <div class="meta-item">
-        <div class="label">氏名</div>
-        <div class="value">${data.employeeName} 様</div>
-      </div>
-      <div class="meta-item">
-        <div class="label">発行日</div>
-        <div class="value">${issueDate}</div>
-      </div>
-    </div>
-
-    <div class="section">
-      <div class="section-title">勤務情報</div>
-      <table>
-        <tr>
-          <th>通常勤務時間</th>
-          <td>${data.workHours.toFixed(1)} 時間</td>
-        </tr>
-        <tr>
-          <th>残業時間</th>
-          <td>${data.overtimeHours.toFixed(1)} 時間</td>
-        </tr>
-        <tr>
-          <th>休日出勤時間</th>
-          <td>${data.holidayHours.toFixed(1)} 時間</td>
-        </tr>
-      </table>
-    </div>
-
-    <div class="section">
-      <div class="section-title">支給</div>
-      <table>
-        <tr>
-          <th>基本給</th>
-          <td>${formatCurrency(data.baseSalary)}</td>
-        </tr>
-        <tr>
-          <th>残業手当</th>
-          <td>${formatCurrency(data.overtimePay)}</td>
-        </tr>
-        ${data.deemedOvertimePay > 0 ? `
-        <tr>
-          <th>みなし残業手当</th>
-          <td>${formatCurrency(data.deemedOvertimePay)}</td>
-        </tr>
-        ` : ''}
-        <tr>
-          <th>休日出勤手当</th>
-          <td>${formatCurrency(data.holidayPay)}</td>
-        </tr>
-        <tr style="background:#e0f2fe;">
-          <th style="font-weight:bold;">総支給額</th>
-          <td style="font-weight:bold;color:#2563eb;">${formatCurrency(data.grossSalary)}</td>
-        </tr>
-      </table>
-    </div>
-
-    <div class="section">
-      <div class="section-title">控除</div>
-      <table>
-        <tr>
-          <th>社会保険料</th>
-          <td>${formatCurrency(data.socialInsurance)}</td>
-        </tr>
-        <tr>
-          <th>雇用保険料</th>
-          <td>${formatCurrency(data.employmentInsurance)}</td>
-        </tr>
-        <tr>
-          <th>所得税</th>
-          <td>${formatCurrency(data.incomeTax)}</td>
-        </tr>
-        <tr style="background:#fef2f2;">
-          <th style="font-weight:bold;">控除合計</th>
-          <td style="font-weight:bold;color:#dc2626;">${formatCurrency(data.totalDeductions)}</td>
-        </tr>
-      </table>
-    </div>
-
-    <div class="summary">
-      <div class="summary-row">
-        <span>総支給額</span>
-        <span>${formatCurrency(data.grossSalary)}</span>
-      </div>
-      <div class="summary-row">
-        <span>控除合計</span>
-        <span>- ${formatCurrency(data.totalDeductions)}</span>
-      </div>
-      <div class="summary-row total">
-        <span>差引支給額</span>
-        <span>${formatCurrency(data.netSalary)}</span>
-      </div>
-    </div>
-
-    <div class="footer">
-      <div class="company">${COMPANY_NAME}</div>
-      <div>この明細書は電子的に発行されたものです</div>
-    </div>
+  <div class="info-container">
+    <table class="info-table" style="width: 45%;">
+      <tr>
+        <th style="width: 30%">部　署</th>
+        <td style="text-align: left;">${jobTitle}</td>
+      </tr>
+      <tr>
+        <th>氏　名</th>
+        <td style="text-align: left;">${data.employeeName}　　様</td>
+      </tr>
+    </table>
+    
+    <table class="info-table" style="width: 40%;">
+      <tr>
+        <th style="width: 40%">給与支給日</th>
+        <td>${year}年${Number(month)}月25日</td>
+      </tr>
+      <tr>
+        <th>給与締日</th>
+        <td>${year}年${Number(month)}月××日</td>
+      </tr>
+    </table>
   </div>
+
+  <table class="main-table">
+    <tr>
+      <th rowspan="4" class="side-th">勤怠項目</th>
+      <th class="col-header">出勤日数</th>
+      <th class="col-header">休日出勤日数</th>
+      <th class="col-header">有給日数</th>
+      <th class="col-header">欠勤日数</th>
+      <th class="col-header">遅刻・早退回数</th>
+    </tr>
+    <tr>
+      <td>${workDays}</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <th>所定労働時間</th>
+      <th>時間外労働時間</th>
+      <th>休日労働時間</th>
+      <th>深夜時間</th>
+      <th>遅刻・早退時間</th>
+    </tr>
+    <tr>
+      <td>${data.workHours.toFixed(1)}</td>
+      <td>${data.overtimeHours.toFixed(1)}</td>
+      <td>${data.holidayHours.toFixed(1)}</td>
+      <td>0.0</td>
+      <td>0.0</td>
+    </tr>
+  </table>
+
+  <table class="main-table">
+    <tr>
+      <th rowspan="8" class="side-th">支給項目</th>
+      <th class="col-header">基本給</th>
+      <th class="col-header">役職手当</th>
+      <th class="col-header">資格手当</th>
+      <th class="col-header"></th>
+      <th class="col-header"></th>
+    </tr>
+    <tr>
+      <td>${formatCurrency(data.baseSalary)}</td>
+      <td>0</td>
+      <td>0</td>
+      <td></td>
+      <td></td>
+    </tr>
+    <tr>
+      <th>普通残業手当</th>
+      <th>休日手当</th>
+      <th>深夜手当</th>
+      <th></th>
+      <th></th>
+    </tr>
+    <tr>
+      <td>${formatCurrency(data.overtimePay)}</td>
+      <td>${formatCurrency(data.holidayPay)}</td>
+      <td>0</td>
+      <td></td>
+      <td></td>
+    </tr>
+    <tr>
+      <th>課税通勤手当</th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+    </tr>
+    <tr>
+      <td>0</td>
+      <td></td>
+      <td></td>
+      <td></td>
+      <td></td>
+    </tr>
+    <tr>
+      <th>非課税通勤手当</th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th>支給額合計</th>
+    </tr>
+    <tr>
+      <td>0</td>
+      <td></td>
+      <td></td>
+      <td></td>
+      <td>${formatCurrency(data.grossSalary)}</td>
+    </tr>
+  </table>
+
+  <table class="main-table">
+    <tr>
+      <th rowspan="6" class="side-th">控除項目</th>
+      <th class="col-header">健康保険</th>
+      <th class="col-header">介護保険</th>
+      <th class="col-header">厚生年金</th>
+      <th class="col-header">雇用保険</th>
+      <th class="col-header"></th>
+    </tr>
+    <tr>
+      <td>${formatCurrency(Math.floor(data.socialInsurance * 0.4))}</td>
+      <td>0</td>
+      <td>${formatCurrency(Math.floor(data.socialInsurance * 0.6))}</td>
+      <td>${formatCurrency(data.employmentInsurance)}</td>
+      <td></td>
+    </tr>
+    <tr>
+      <th>所得税</th>
+      <th>住民税</th>
+      <th></th>
+      <th></th>
+      <th></th>
+    </tr>
+    <tr>
+      <td>${formatCurrency(data.incomeTax)}</td>
+      <td>0</td>
+      <td></td>
+      <td></td>
+      <td></td>
+    </tr>
+    <tr>
+      <th style="border-bottom: none;"></th>
+      <th style="border-bottom: none;"></th>
+      <th style="border-bottom: none;"></th>
+      <th style="border-bottom: none;"></th>
+      <th>控除額合計</th>
+    </tr>
+    <tr>
+      <td style="border-top: none;"></td>
+      <td style="border-top: none;"></td>
+      <td style="border-top: none;"></td>
+      <td style="border-top: none;"></td>
+      <td>${formatCurrency(data.totalDeductions)}</td>
+    </tr>
+  </table>
+
+  <table class="main-table" style="margin-bottom: 20px;">
+    <tr>
+      <th rowspan="4" class="side-th">合計</th>
+      <th style="width: 28%">社会保険合計</th>
+      <th style="width: 28%">課税対象額</th>
+      <th style="width: 13%"></th>
+      <th style="width: 13%"></th>
+      <th style="width: 13%"></th>
+    </tr>
+    <tr>
+      <td>${formatCurrency(data.socialInsurance + data.employmentInsurance)}</td>
+      <td>${formatCurrency(data.grossSalary)}</td>
+      <td></td>
+      <td></td>
+      <td></td>
+    </tr>
+    <tr>
+      <th style="border-bottom: none;"></th>
+      <th style="border-bottom: none;"></th>
+      <th>振込支給額</th>
+      <th>現金支給額</th>
+      <th>差引支給額</th>
+    </tr>
+    <tr>
+      <td style="border-top: none;"></td>
+      <td style="border-top: none;"></td>
+      <td>${formatCurrency(data.netSalary)}</td>
+      <td>0</td>
+      <td>${formatCurrency(data.netSalary)}</td>
+    </tr>
+  </table>
+
+  <table class="main-table">
+    <tr>
+      <th class="side-th" style="height: 80px;">備考欄</th>
+      <td style="text-align: left; vertical-align: top; padding: 10px;">
+        ${data.deemedOvertimePay > 0 ? 'みなし残業手当: ' + formatCurrency(data.deemedOvertimePay) : ''}
+      </td>
+    </tr>
+  </table>
+
 </body>
 </html>
   `
@@ -264,44 +336,256 @@ function generatePayslipHtml(data: PayslipData): string {
 
 // PDFを生成
 export async function generatePayslipPdf(data: PayslipData): Promise<Buffer> {
-    const html = generatePayslipHtml(data)
+  const html = generatePayslipHtml(data)
 
-    const browser = await puppeteer.launch({
-        headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+  const browser = await puppeteer.launch({
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+  })
+
+  try {
+    const page = await browser.newPage()
+    await page.setContent(html, { waitUntil: 'networkidle0' })
+
+    const pdf = await page.pdf({
+      format: 'A4',
+      printBackground: true,
+      margin: { top: '10mm', bottom: '10mm', left: '10mm', right: '10mm' },
     })
 
-    try {
-        const page = await browser.newPage()
-        await page.setContent(html, { waitUntil: 'networkidle0' })
-
-        const pdf = await page.pdf({
-            format: 'A4',
-            printBackground: true,
-            margin: { top: '10mm', bottom: '10mm', left: '10mm', right: '10mm' },
-        })
-
-        return Buffer.from(pdf)
-    } finally {
-        await browser.close()
-    }
+    return Buffer.from(pdf)
+  } finally {
+    await browser.close()
+  }
 }
 
 // PDFをファイルに保存
 export async function savePayslipPdf(data: PayslipData): Promise<string> {
-    const pdfBuffer = await generatePayslipPdf(data)
+  const pdfBuffer = await generatePayslipPdf(data)
 
-    // ディレクトリ作成
-    const dirPath = path.join(STORAGE_PATH, data.yearMonth)
-    await fs.mkdir(dirPath, { recursive: true })
+  // ディレクトリ作成
+  const dirPath = path.join(STORAGE_PATH, data.yearMonth)
+  await fs.mkdir(dirPath, { recursive: true })
 
-    // ファイル名生成（タイムスタンプ付き、上書き禁止）
-    const timestamp = Date.now()
-    const filename = `${data.employeeCode}_${data.employeeName}_${timestamp}.pdf`
-    const filePath = path.join(dirPath, filename)
+  // ファイル名生成（タイムスタンプ付き、上書き禁止）
+  const timestamp = Date.now()
+  const filename = `${data.employeeCode}_${data.employeeName}_${timestamp}.pdf`
+  const filePath = path.join(dirPath, filename)
 
-    // ファイル保存
-    await fs.writeFile(filePath, pdfBuffer)
+  // ファイル保存
+  await fs.writeFile(filePath, pdfBuffer)
 
-    return filePath
+  return filePath
+}
+
+// -------------------------------------------------------------
+// 出勤簿PDF生成
+// -------------------------------------------------------------
+export async function generateAttendanceRecordPdfData(employeeData: any, timeEntries: any[], yearMonth: string): Promise<Buffer> {
+  const [year, month] = yearMonth.split('-')
+
+  // 省略：ここでは実際のHTMLを組み立てる。労働基準法109条に則り、氏名、出勤・退勤日時、休憩時間、備考（note）などをリスト化する
+  let rowsHtml = ''
+  let totalWorkTime = 0
+  timeEntries.forEach(entry => {
+    const date = format(new Date(entry.date), 'MM/dd')
+    const clockIn = entry.clockIn ? format(new Date(entry.clockIn), 'HH:mm') : ''
+    const clockOut = entry.clockOut ? format(new Date(entry.clockOut), 'HH:mm') : ''
+    const note = entry.note || ''
+
+    rowsHtml += `
+            <tr>
+                <td>${date}</td>
+                <td>${clockIn}</td>
+                <td>${clockOut}</td>
+                <td>${note}</td>
+            </tr>
+        `
+  })
+
+  const html = `
+    <!DOCTYPE html>
+    <html lang="ja">
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            body { font-family: sans-serif; font-size: 12px; padding: 20mm; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th, td { border: 1px solid #333; padding: 6px; text-align: left; }
+            th { background-color: #f1f5f9; }
+            h1 { text-align: center; }
+        </style>
+    </head>
+    <body>
+        <h1>出勤簿 ${year}年${month}月</h1>
+        <p>氏名: ${employeeData.name} (${employeeData.employeeCode})</p>
+        <table>
+            <thead>
+                <tr>
+                    <th>日付</th>
+                    <th>出勤時間</th>
+                    <th>退勤時間</th>
+                    <th>備考（現場名など）</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${rowsHtml}
+            </tbody>
+        </table>
+    </body>
+    </html>
+    `
+
+  const browser = await puppeteer.launch({
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+  })
+
+  try {
+    const page = await browser.newPage()
+    await page.setContent(html, { waitUntil: 'networkidle0' })
+    const pdf = await page.pdf({ format: 'A4', margin: { top: '10mm', bottom: '10mm', left: '10mm', right: '10mm' } })
+    return Buffer.from(pdf)
+  } finally {
+    await browser.close()
+  }
+}
+
+// -------------------------------------------------------------
+// シフト表PDF生成
+// -------------------------------------------------------------
+export async function generateShiftPdfData(shiftDataList: any[], yearMonth: string): Promise<Buffer> {
+  const [year, month] = yearMonth.split('-')
+
+  let htmlContent = ''
+  shiftDataList.forEach(req => {
+    let rowsHtml = ''
+    req.shiftEntries.forEach((entry: any) => {
+      const dateObj = new Date(entry.date)
+      const dayStr = `${dateObj.getDate()}日`
+      const typeStr = entry.isRest ? '<span style="color:red">公休</span>' : '出勤'
+      const timeStr = entry.isRest ? '-' : `${entry.startTime || ''} 〜 ${entry.endTime || ''}`
+      const noteStr = entry.note || ''
+
+      rowsHtml += `<tr>
+              <td>${dayStr}</td>
+              <td>${typeStr}</td>
+              <td>${timeStr}</td>
+              <td>${noteStr}</td>
+          </tr>`
+    })
+
+    htmlContent += `
+        <div class="page-break">
+            <h2>シフト表 ${year}年${month}月</h2>
+            <h3>${req.employee.name} 様 (${req.employee.employeeCode})</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>日付</th>
+                        <th>区分</th>
+                        <th>勤務時間</th>
+                        <th>備考</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${rowsHtml}
+                </tbody>
+            </table>
+        </div>
+      `
+  })
+
+  const html = `
+    <!DOCTYPE html>
+    <html lang="ja">
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            body { font-family: sans-serif; font-size: 12px; padding: 10mm; }
+            table { width: 100%; border-collapse: collapse; margin-top: 10px; margin-bottom: 30px; }
+            th, td { border: 1px solid #333; padding: 6px; text-align: left; }
+            th { background-color: #f1f5f9; }
+            h2, h3 { margin-bottom: 5px; }
+            .page-break { page-break-after: always; }
+        </style>
+    </head>
+    <body>
+        ${htmlContent}
+    </body>
+    </html>
+    `
+
+  const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] })
+  try {
+    const page = await browser.newPage()
+    await page.setContent(html, { waitUntil: 'networkidle0' })
+    const pdf = await page.pdf({ format: 'A4', margin: { top: '10mm', bottom: '10mm', left: '10mm', right: '10mm' } })
+    return Buffer.from(pdf)
+  } finally {
+    await browser.close()
+  }
+}
+
+// -------------------------------------------------------------
+// 営業カレンダーPDF生成
+// -------------------------------------------------------------
+export async function generateBusinessCalendarPdfData(calendarData: any[], yearMonth: string): Promise<Buffer> {
+  const [year, month] = yearMonth.split('-')
+
+  let rowsHtml = ''
+  calendarData.forEach(day => {
+    const dateObj = new Date(day.date)
+    const dayStr = `${dateObj.getDate()}日`
+    const dayNames = ['日', '月', '火', '水', '木', '金', '土']
+    const dayOfWeekStr = dayNames[day.dayOfWeek]
+    const typeStr = day.isHoliday ? '<span style="color:red">休日</span>' : '営業日'
+    const noteStr = day.note || ''
+
+    rowsHtml += `<tr>
+        <td>${dayStr} (${dayOfWeekStr})</td>
+        <td>${typeStr}</td>
+        <td>${noteStr}</td>
+    </tr>`
+  })
+
+  const html = `
+    <!DOCTYPE html>
+    <html lang="ja">
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            body { font-family: sans-serif; font-size: 12px; padding: 20mm; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th, td { border: 1px solid #333; padding: 6px; text-align: left; }
+            th { background-color: #f1f5f9; }
+        </style>
+    </head>
+    <body>
+        <h2>営業カレンダー (現場作業員適用) ${year}年${month}月</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>日付</th>
+                    <th>稼働/休日</th>
+                    <th>備考</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${rowsHtml}
+            </tbody>
+        </table>
+    </body>
+    </html>
+    `
+
+  const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] })
+  try {
+    const page = await browser.newPage()
+    await page.setContent(html, { waitUntil: 'networkidle0' })
+    const pdf = await page.pdf({ format: 'A4', margin: { top: '10mm', bottom: '10mm', left: '10mm', right: '10mm' } })
+    return Buffer.from(pdf)
+  } finally {
+    await browser.close()
+  }
 }

@@ -12,10 +12,12 @@ interface User {
 }
 
 const navItems = [
-    { href: '/employee/dashboard', label: 'ホーム', icon: '🏠' },
-    { href: '/employee/attendance', label: '勤怠履歴', icon: '📅' },
-    { href: '/employee/requests', label: '申請', icon: '📝' },
-    { href: '/employee/payslips', label: '給与明細', icon: '💰' },
+    { href: '/employee/dashboard', label: 'ホーム' },
+    { href: '/employee/shifts', label: 'シフト希望' },
+    { href: '/employee/attendance', label: '勤怠履歴' },
+    { href: '/employee/requests', label: '申請' },
+    { href: '/employee/payslips', label: '給与明細' },
+    { href: '/employee/profile', label: '設定' },
 ]
 
 export default function EmployeeLayout({ children }: { children: React.ReactNode }) {
@@ -90,11 +92,10 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
                             key={item.href}
                             href={item.href}
                             className={`flex-1 flex flex-col items-center py-3 text-xs transition-colors ${pathname.startsWith(item.href)
-                                    ? 'text-primary-600'
-                                    : 'text-slate-500 hover:text-slate-700'
+                                ? 'text-primary-600'
+                                : 'text-slate-500 hover:text-slate-700'
                                 }`}
                         >
-                            <span className="text-xl mb-1">{item.icon}</span>
                             <span>{item.label}</span>
                         </Link>
                     ))}

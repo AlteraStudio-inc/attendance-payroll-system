@@ -11,6 +11,7 @@ const updateEmployeeSchema = z.object({
     password: z.string().min(6).optional(),
     pin: z.string().regex(/^\d{4,6}$/).optional().nullable(),
     role: z.enum(['EMPLOYEE', 'ADMIN']).optional(),
+    jobType: z.enum(['CONSTRUCTION', 'NAIL', 'EYELASH', 'SUPPORT', 'OTHER']).optional(),
     employmentType: z.enum(['FULL_TIME', 'CONTRACT', 'PART_TIME', 'HOURLY']).optional(),
     wageType: z.enum(['HOURLY', 'FIXED']).optional(),
     hourlyRate: z.number().positive().optional().nullable(),
@@ -39,6 +40,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 name: true,
                 email: true,
                 role: true,
+                jobType: true,
                 employmentType: true,
                 wageType: true,
                 hourlyRate: true,
@@ -111,6 +113,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         if (data.name !== undefined) updateData.name = data.name
         if (data.email !== undefined) updateData.email = data.email
         if (data.role !== undefined) updateData.role = data.role
+        if (data.jobType !== undefined) updateData.jobType = data.jobType
         if (data.employmentType !== undefined) updateData.employmentType = data.employmentType
         if (data.wageType !== undefined) updateData.wageType = data.wageType
         if (data.hourlyRate !== undefined) updateData.hourlyRate = data.hourlyRate
@@ -139,6 +142,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
                 name: true,
                 email: true,
                 role: true,
+                jobType: true,
                 employmentType: true,
                 wageType: true,
                 hourlyRate: true,

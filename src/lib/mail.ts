@@ -24,6 +24,14 @@ export interface SendPayslipEmailParams {
     pdfFilename: string
 }
 
+export interface SendShiftEmailParams {
+    employeeEmail: string
+    employeeName: string
+    yearMonth: string
+    pdfBuffer: Buffer
+    pdfFilename: string
+}
+
 // 給与明細メールを送信
 export async function sendPayslipEmail(params: SendPayslipEmailParams): Promise<void> {
     const { employeeId, employeeEmail, employeeName, yearMonth, pdfBuffer, pdfFilename } = params
@@ -75,6 +83,75 @@ ${year}年${month}月分の給与明細を添付いたします。
 
 ※ 本メールは自動送信されています。
 ※ ご不明な点がございましたら、経理担当までお問い合わせください。
+
+${COMPANY_NAME}
+  `
+
+    await transporter.sendMail({
+        from: FROM_ADDRESS,
+        to: employeeEmail,
+        subject,
+        text: textContent,
+        html: htmlContent,
+        attachments: [
+            {
+                filename: pdfFilename,
+                content: pdfBuffer,
+                contentType: 'application/pdf',
+            },
+        ],
+    })
+}
+
+// シフト表メールを送信
+export async function sendShiftPdfEmail(params: SendShiftEmailParams): Promise<void> {
+    const { employeeEmail, employeeName, yearMonth, pdfBuffer, pdfFilename } = params
+
+    const [year, month] = yearMonth.split('-')
+    const subject = `【${COMPANY_NAME}】${year}年${month}月分 シフト表のお知らせ`
+
+    const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background: #16a34a; color: white; padding: 20px; text-align: center; }
+    .content { padding: 20px; background: #f8fafc; }
+    .footer { padding: 20px; text-align: center; font-size: 12px; color: #666; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>${COMPANY_NAME}</h1>
+    </div>
+    <div class="content">
+      <p>${employeeName} 様</p>
+      <p>お疲れ様です。</p>
+      <p>${year}年${month}月分のシフト表が確定しましたので添付いたします。</p>
+      <p>内容をご確認くださいますようお願いいたします。</p>
+      <br>
+      <p>※ 本メールは自動送信されています。</p>
+    </div>
+    <div class="footer">
+      <p>${COMPANY_NAME}</p>
+    </div>
+  </div>
+</body>
+</html>
+  `
+
+    const textContent = `
+${employeeName} 様
+
+お疲れ様です。
+
+${year}年${month}月分のシフト表が確定しましたので添付いたします。
+内容をご確認くださいますようお願いいたします。
+
+※ 本メールは自動送信されています。
 
 ${COMPANY_NAME}
   `
