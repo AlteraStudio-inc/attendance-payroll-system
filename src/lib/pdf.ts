@@ -1,4 +1,22 @@
 import puppeteer from 'puppeteer'
+import puppeteerCore from 'puppeteer-core'
+
+const getBrowser = async () => {
+  if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
+    const chromium = require('@sparticuz/chromium')
+    return await puppeteerCore.launch({
+      args: chromium.args,
+      defaultViewport: chromium.defaultViewport,
+      executablePath: await chromium.executablePath(),
+      headless: chromium.headless === false ? false : true,
+    })
+  } else {
+    return await puppeteer.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    })
+  }
+}
 import * as fs from 'fs/promises'
 import * as path from 'path'
 import { format } from 'date-fns'
@@ -338,10 +356,7 @@ function generatePayslipHtml(data: PayslipData): string {
 export async function generatePayslipPdf(data: PayslipData): Promise<Buffer> {
   const html = generatePayslipHtml(data)
 
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox'],
-  })
+  const browser = await getBrowser()
 
   try {
     const page = await browser.newPage()
@@ -436,10 +451,7 @@ export async function generateAttendanceRecordPdfData(employeeData: any, timeEnt
     </html>
     `
 
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox'],
-  })
+  const browser = await getBrowser()
 
   try {
     const page = await browser.newPage()
@@ -516,7 +528,7 @@ export async function generateShiftPdfData(shiftDataList: any[], yearMonth: stri
     </html>
     `
 
-  const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] })
+  const browser = await getBrowser()
   try {
     const page = await browser.newPage()
     await page.setContent(html, { waitUntil: 'networkidle0' })
@@ -579,7 +591,7 @@ export async function generateBusinessCalendarPdfData(calendarData: any[], yearM
     </html>
     `
 
-  const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] })
+  const browser = await getBrowser()
   try {
     const page = await browser.newPage()
     await page.setContent(html, { waitUntil: 'networkidle0' })
