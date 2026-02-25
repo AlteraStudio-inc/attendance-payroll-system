@@ -15,6 +15,7 @@ interface ShiftRequest {
     id: string
     yearMonth: string
     status: string
+    submittedAt: string | Date
     employee: Employee
     shiftEntries: {
         date: string
@@ -331,6 +332,20 @@ export default function AdminShiftsPage() {
                                                     {dayEntries.map((item: { entry: ShiftRequest['shiftEntries'][0], employee: Employee, status: string }, i: number) => {
                                                         const isRest = item.entry.isRest
                                                         const hasNote = !!item.entry.note
+
+                                                        // Fix timezone shifting by manually extracting the time portion (HH:mm)
+                                                        const getRawTime = (isoString: string | null) => {
+                                                            if (!isoString) return ''
+                                                            const parts = isoString.split('T')
+                                                            if (parts.length > 1) {
+                                                                return parts[1].substring(0, 5)
+                                                            }
+                                                            return ''
+                                                        }
+
+                                                        const startTimeStr = getRawTime(item.entry.startTime)
+                                                        const endTimeStr = getRawTime(item.entry.endTime)
+
                                                         return (
                                                             <div
                                                                 key={i}
@@ -341,7 +356,7 @@ export default function AdminShiftsPage() {
                                                                 <div className="font-bold truncate" title={item.employee.name}>{item.employee.name}</div>
                                                                 <div className="flex items-center justify-between mt-0.5">
                                                                     <span className="opacity-90">
-                                                                        {isRest ? '(休)' : `${item.entry.startTime ? format(new Date(item.entry.startTime), 'HH:mm') : ''}-${item.entry.endTime ? format(new Date(item.entry.endTime), 'HH:mm') : ''}`}
+                                                                        {isRest ? '(休)' : `${startTimeStr}-${endTimeStr}`}
                                                                     </span>
                                                                     {hasNote && <span title="メモあり" className="inline-block px-1 ml-1 text-[10px] bg-yellow-100 text-yellow-800 rounded border border-yellow-200">メモ</span>}
                                                                 </div>
@@ -365,6 +380,7 @@ export default function AdminShiftsPage() {
                                     <tr className="bg-slate-50 border-y border-slate-200 text-sm font-medium text-slate-500">
                                         <th className="p-4">従業員</th>
                                         <th className="p-4">職種</th>
+                                        <th className="p-4">希望シフト</th>
                                         <th className="p-4">ステータス</th>
                                         <th className="p-4">提出日</th>
                                         <th className="p-4">アクション</th>
@@ -396,6 +412,17 @@ export default function AdminShiftsPage() {
                                                                     req.employee.jobType === 'SUPPORT' ? '就労支援' : 'その他'}
                                                     </td>
                                                     <td className="p-4">
+                                                        <div className="text-sm">
+                                                            <div>出勤希望: <span className="font-bold">{req.shiftEntries.filter(e => !e.isRest && e.startTime).length}</span>日</div>
+                                                            <div>休み希望: <span className="font-bold text-red-500">{req.shiftEntries.filter(e => e.isRest).length}</span>日</div>
+                                                            {req.shiftEntries.some(e => e.note) && (
+                                                                <div className="text-xs text-slate-500 mt-1 flex items-center gap-1">
+                                                                    <span className="inline-block px-1 bg-yellow-100 text-yellow-800 rounded border border-yellow-200 text-[10px]">メモあり</span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                    <td className="p-4">
                                                         <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${req.status === 'CONFIRMED' ? 'bg-green-100 text-green-800' :
                                                             'bg-yellow-100 text-yellow-800'
                                                             }`}>
@@ -403,8 +430,7 @@ export default function AdminShiftsPage() {
                                                         </span>
                                                     </td>
                                                     <td className="p-4 text-slate-500 text-sm">
-                                                        {/* APIからcreatedAtを返す場合ここに表示 */}
-                                                        -
+                                                        {req.submittedAt ? format(new Date(req.submittedAt as string), 'MM/dd HH:mm') : '-'}
                                                     </td>
                                                     <td className="p-4">
                                                         <div className="flex gap-2">
@@ -470,9 +496,23 @@ export default function AdminShiftsPage() {
                                         <span className="text-red-500 flex items-center gap-2">休み希望</span>
                                     ) : (
                                         <span className="text-primary-600 flex items-center gap-2">
-                                            {selectedEntry.entry.startTime ? format(new Date(selectedEntry.entry.startTime), 'HH:mm') : '--:--'}
-                                            <span className="text-slate-300 mx-1">/</span>
-                                            {selectedEntry.entry.endTime ? format(new Date(selectedEntry.entry.endTime), 'HH:mm') : '--:--'}
+                                            {(() => {
+                                                const getRawTime = (isoString: string | null) => {
+                                                    if (!isoString) return '--:--'
+                                                    const parts = isoString.split('T')
+                                                    if (parts.length > 1) {
+                                                        return parts[1].substring(0, 5)
+                                                    }
+                                                    return '--:--'
+                                                }
+                                                return (
+                                                    <>
+                                                        {getRawTime(selectedEntry.entry.startTime)}
+                                                        <span className="text-slate-300 mx-1">/</span>
+                                                        {getRawTime(selectedEntry.entry.endTime)}
+                                                    </>
+                                                )
+                                            })()}
                                         </span>
                                     )}
                                 </p>

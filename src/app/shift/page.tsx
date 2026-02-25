@@ -17,6 +17,7 @@ export default function StandaloneShiftPage() {
     // Auth state
     const [isLoggedIn, setIsLoggedIn] = useState(false)
     const [employeeCode, setEmployeeCode] = useState('')
+    const [employeeName, setEmployeeName] = useState('')
     const [pin, setPin] = useState('')
     const [authLoading, setAuthLoading] = useState(false)
     const [authError, setAuthError] = useState('')
@@ -35,6 +36,14 @@ export default function StandaloneShiftPage() {
     useEffect(() => {
         const checkAuth = async () => {
             try {
+                // First check auth/me to get the user name
+                const meRes = await fetch('/api/auth/me')
+                if (meRes.ok) {
+                    const meData = await meRes.json()
+                    setEmployeeName(meData.user?.name || '')
+                    setEmployeeCode(meData.user?.employeeCode || '')
+                }
+
                 const res = await fetch(`/api/shifts/requests?yearMonth=${yearMonth}`)
                 if (res.ok) {
                     setIsLoggedIn(true)
@@ -73,6 +82,14 @@ export default function StandaloneShiftPage() {
 
             // Immediately load data
             setIsLoggedIn(true)
+
+            // fetch user name
+            const meRes = await fetch('/api/auth/me')
+            if (meRes.ok) {
+                const meData = await meRes.json()
+                setEmployeeName(meData.user?.name || '')
+            }
+
             const res = await fetch(`/api/shifts/requests?yearMonth=${yearMonth}`)
             if (res.ok) {
                 loadShiftData(res)
@@ -90,36 +107,9 @@ export default function StandaloneShiftPage() {
         await fetch('/api/auth/logout', { method: 'POST' })
         setIsLoggedIn(false)
         setEmployeeCode('')
+        setEmployeeName('')
         setPin('')
         setEntries([])
-    }
-
-    const loadShiftData = async (res: Response) => {
-        setLoading(true)
-        try {
-            const data = await res.json()
-            if (Array.isArray(data) && data.length > 0 && data[0].shiftEntries) {
-                const existingEntries = data[0].shiftEntries
-                const newEntries = generateMonthEntries(yearMonth)
-                existingEntries.forEach((ex: any) => {
-                    const dateStr = new Date(ex.date).toISOString().split('T')[0]
-                    const target = newEntries.find(n => n.date === dateStr)
-                    if (target) {
-                        target.isRest = ex.isRest
-                        target.startTime = ex.startTime ? new Date(ex.startTime).toTimeString().substring(0, 5) : ''
-                        target.endTime = ex.endTime ? new Date(ex.endTime).toTimeString().substring(0, 5) : ''
-                        target.note = ex.note || ''
-                    }
-                })
-                setEntries(newEntries)
-                return
-            }
-        } catch (err) {
-            console.error(err)
-        } finally {
-            setEntries(generateMonthEntries(yearMonth))
-            setLoading(false)
-        }
     }
 
     const generateMonthEntries = (ym: string) => {
@@ -143,6 +133,72 @@ export default function StandaloneShiftPage() {
         const newEntries = [...entries]
         newEntries[index] = { ...newEntries[index], [field]: value }
         setEntries(newEntries)
+        saveToLocalStorage(newEntries)
+    }
+
+    const saveToLocalStorage = (data: ShiftEntryForm[]) => {
+        if (!employeeCode || !yearMonth) return
+        const key = `shift_draft_${employeeCode}_${yearMonth}`
+        localStorage.setItem(key, JSON.stringify(data))
+    }
+
+    const loadFromLocalStorage = (baseForms: ShiftEntryForm[]) => {
+        if (!employeeCode || !yearMonth) return baseForms
+        const key = `shift_draft_${employeeCode}_${yearMonth}`
+        const saved = localStorage.getItem(key)
+        if (saved) {
+            try {
+                const parsed = JSON.parse(saved) as ShiftEntryForm[]
+                // マージ処理。既存の日付に入力があれば上書き
+                const newForms = [...baseForms]
+                parsed.forEach((p: any) => {
+                    const target = newForms.find(n => n.date === p.date)
+                    if (target) {
+                        target.isRest = p.isRest
+                        target.startTime = p.startTime
+                        target.endTime = p.endTime
+                        target.note = p.note || ''
+                    }
+                })
+                return newForms
+            } catch (e) {
+                return baseForms
+            }
+        }
+        return baseForms
+    }
+
+    const loadShiftData = async (res: Response) => {
+        setLoading(true)
+        try {
+            const data = await res.json()
+            if (Array.isArray(data) && data.length > 0 && data[0].shiftEntries) {
+                const existingEntries = data[0].shiftEntries
+                const newEntries = generateMonthEntries(yearMonth)
+                existingEntries.forEach((ex: any) => {
+                    const dateStr = new Date(ex.date).toISOString().split('T')[0]
+                    const target = newEntries.find(n => n.date === dateStr)
+                    if (target) {
+                        target.isRest = ex.isRest
+                        target.startTime = ex.startTime ? new Date(ex.startTime).toTimeString().substring(0, 5) : ''
+                        target.endTime = ex.endTime ? new Date(ex.endTime).toTimeString().substring(0, 5) : ''
+                        target.note = ex.note || ''
+                    }
+                })
+                // APIからのデータをLocalStorageにも反映しておく
+                setEntries(newEntries)
+                saveToLocalStorage(newEntries)
+                return
+            }
+        } catch (err) {
+            console.error(err)
+        } finally {
+            // APIからデータがない場合は LocalStorage から読み込む
+            const baseEntries = generateMonthEntries(yearMonth)
+            const draftEntries = loadFromLocalStorage(baseEntries)
+            setEntries(draftEntries)
+            setLoading(false)
+        }
     }
 
     const handleSubmit = async () => {
@@ -183,6 +239,11 @@ export default function StandaloneShiftPage() {
 
             setMessage({ type: 'success', text: 'シフト申請を保存しました。' })
             window.scrollTo(0, 0)
+
+            // 提出完了したら下書きを消す
+            if (employeeCode) {
+                localStorage.removeItem(`shift_draft_${employeeCode}_${yearMonth}`)
+            }
         } catch (err) {
             setMessage({ type: 'error', text: err instanceof Error ? err.message : '保存に失敗しました' })
             window.scrollTo(0, 0)
@@ -247,7 +308,12 @@ export default function StandaloneShiftPage() {
         <div className="min-h-screen bg-slate-50 p-4 pb-24 md:p-8">
             <div className="max-w-3xl mx-auto space-y-6">
                 <div className="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-slate-200">
-                    <h1 className="text-xl font-bold text-slate-800">月次シフト申請</h1>
+                    <div className="flex flex-col">
+                        <h1 className="text-xl font-bold text-slate-800">月次シフト申請</h1>
+                        <span className="text-sm text-slate-500 mt-1">
+                            ログイン中: <span className="font-semibold text-slate-700">{employeeName || employeeCode}</span>
+                        </span>
+                    </div>
                     <button onClick={handleLogout} className="text-sm text-slate-500 hover:text-slate-800 font-medium">
                         ログアウト
                     </button>
