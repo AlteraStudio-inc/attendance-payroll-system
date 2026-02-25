@@ -64,6 +64,7 @@ function generatePayslipHtml(data: PayslipData): string {
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet">
   <style>
     * {
       margin: 0;
@@ -71,7 +72,7 @@ function generatePayslipHtml(data: PayslipData): string {
       box-sizing: border-box;
     }
     body {
-      font-family: 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif;
+      font-family: 'Noto Sans JP', sans-serif;
       font-size: 11px;
       line-height: 1.2;
       padding: 15mm;
@@ -423,8 +424,9 @@ export async function generateAttendanceRecordPdfData(employeeData: any, timeEnt
     <html lang="ja">
     <head>
         <meta charset="UTF-8">
+        <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet">
         <style>
-            body { font-family: sans-serif; font-size: 12px; padding: 20mm; }
+            body { font-family: 'Noto Sans JP', sans-serif; font-size: 12px; padding: 20mm; }
             table { width: 100%; border-collapse: collapse; margin-top: 20px; }
             th, td { border: 1px solid #333; padding: 6px; text-align: left; }
             th { background-color: #f1f5f9; }
@@ -513,8 +515,9 @@ export async function generateShiftPdfData(shiftDataList: any[], yearMonth: stri
     <html lang="ja">
     <head>
         <meta charset="UTF-8">
+        <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet">
         <style>
-            body { font-family: sans-serif; font-size: 12px; padding: 10mm; }
+            body { font-family: 'Noto Sans JP', sans-serif; font-size: 12px; padding: 10mm; }
             table { width: 100%; border-collapse: collapse; margin-top: 10px; margin-bottom: 30px; }
             th, td { border: 1px solid #333; padding: 6px; text-align: left; }
             th { background-color: #f1f5f9; }
@@ -566,8 +569,9 @@ export async function generateBusinessCalendarPdfData(calendarData: any[], yearM
     <html lang="ja">
     <head>
         <meta charset="UTF-8">
+        <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet">
         <style>
-            body { font-family: sans-serif; font-size: 12px; padding: 20mm; }
+            body { font-family: 'Noto Sans JP', sans-serif; font-size: 12px; padding: 20mm; }
             table { width: 100%; border-collapse: collapse; margin-top: 20px; }
             th, td { border: 1px solid #333; padding: 6px; text-align: left; }
             th { background-color: #f1f5f9; }
