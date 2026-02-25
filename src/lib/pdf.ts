@@ -605,3 +605,112 @@ export async function generateBusinessCalendarPdfData(calendarData: any[], yearM
     await browser.close()
   }
 }
+
+// -------------------------------------------------------------
+// 月次カレンダー形式シフト表PDF一括出力 (マトリックス形式)
+// -------------------------------------------------------------
+export async function generateMonthlyShiftMatrixPdfData(yearMonth: string, shiftRequests: any[]): Promise<Buffer> {
+  const [year, month] = yearMonth.split('-')
+  const startDate = new Date(Number(year), Number(month) - 1, 1)
+  const endDate = new Date(Number(year), Number(month), 0)
+  const daysInMonth = endDate.getDate()
+
+  // ヘッダー行（日付）の生成
+  let headerHtml = '<th class="name-header">氏名</th>'
+  for (let i = 1; i <= daysInMonth; i++) {
+    const d = new Date(Number(year), Number(month) - 1, i)
+    const dayNames = ['日', '月', '火', '水', '木', '金', '土']
+    const dayOfWeek = dayNames[d.getDay()]
+    const color = d.getDay() === 0 ? 'color: #dc2626;' : d.getDay() === 6 ? 'color: #2563eb;' : ''
+    headerHtml += `<th style="${color}">${i}<br><span style="font-size: 8px;">(${dayOfWeek})</span></th>`
+  }
+
+  // データ行の生成
+  let rowsHtml = ''
+  shiftRequests.forEach(req => {
+    // 日付ごとのシフトをマッピング
+    const entryMap = new Map()
+    req.shiftEntries.forEach((entry: any) => {
+      const dateStr = format(new Date(entry.date), 'yyyy-MM-dd')
+      entryMap.set(dateStr, entry)
+    })
+
+    rowsHtml += `<tr><td class="name-cell">${req.employee.name}</td>`
+
+    for (let i = 1; i <= daysInMonth; i++) {
+      const d = new Date(Number(year), Number(month) - 1, i)
+      const dateStr = format(d, 'yyyy-MM-dd')
+      const entry = entryMap.get(dateStr)
+      let cellText = ''
+      let isRest = false
+      if (entry) {
+        if (entry.isRest) {
+          cellText = '休'
+          isRest = true
+        } else if (entry.startTime && entry.endTime) {
+          const s = format(new Date(entry.startTime), 'HH:mm')
+          const e = format(new Date(entry.endTime), 'HH:mm')
+          cellText = `${s}<br>|<br>${e}`
+        }
+      }
+
+      const bgColor = isRest ? 'background-color: #fee2e2;' : ''
+      const textColor = isRest ? 'color: #dc2626;' : ''
+      rowsHtml += `<td style="${bgColor} ${textColor}">${cellText}</td>`
+    }
+    rowsHtml += '</tr>'
+  })
+
+  // 申請がない場合のメッセージ
+  if (shiftRequests.length === 0) {
+    rowsHtml = `<tr><td colspan="${daysInMonth + 1}" style="text-align: center; padding: 20px;">この月の確定済みシフト申請はありません。</td></tr>`
+  }
+
+  const html = `
+    <!DOCTYPE html>
+    <html lang="ja">
+    <head>
+        <meta charset="UTF-8">
+        <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet">
+        <style>
+            body { font-family: 'Noto Sans JP', sans-serif; font-size: 10px; padding: 5mm; }
+            h2 { text-align: center; margin-bottom: 20px; font-size: 18px; color: #1e293b; }
+            table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+            th, td { border: 1px solid #94a3b8; text-align: center; word-wrap: break-word; vertical-align: middle; }
+            th { background-color: #f1f5f9; padding: 4px 2px; font-weight: normal; font-size: 9px; }
+            .name-header { width: 80px; font-size: 11px; font-weight: bold; }
+            td { height: 40px; padding: 2px; font-size: 8px; line-height: 1.2; }
+            .name-cell { font-size: 11px; font-weight: bold; text-align: left; padding-left: 8px; }
+        </style>
+    </head>
+    <body>
+        <h2>シフト管理表（月別） ${year}年${month}月</h2>
+        <table>
+            <thead>
+                <tr>
+                    ${headerHtml}
+                </tr>
+            </thead>
+            <tbody>
+                ${rowsHtml}
+            </tbody>
+        </table>
+    </body>
+    </html>
+    `
+
+  const browser = await getBrowser()
+  try {
+    const page = await browser.newPage()
+    await page.setContent(html, { waitUntil: 'networkidle0' })
+    // A4横向きに設定
+    const pdf = await page.pdf({
+      format: 'A4',
+      landscape: true,
+      margin: { top: '10mm', bottom: '10mm', left: '10mm', right: '10mm' }
+    })
+    return Buffer.from(pdf)
+  } finally {
+    await browser.close()
+  }
+}

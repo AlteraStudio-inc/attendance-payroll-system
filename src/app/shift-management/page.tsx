@@ -152,20 +152,29 @@ export default function AdminShiftsPage() {
         }
     }
 
-    const handleSendPdf = async (requestId: string) => {
-        setProcessingId(requestId + '_pdf')
+    const handleExportMonthlyPdf = async () => {
+        setProcessingId('export_pdf')
         setMessage(null)
         try {
-            const res = await fetch(`/api/shifts/requests/${requestId}/send-pdf`, {
-                method: 'POST'
-            })
+            const res = await fetch(`/api/shifts/export-pdf?yearMonth=${targetYearMonth}`)
             if (!res.ok) {
                 const error = await res.json()
-                throw new Error(error.error || '送信に失敗しました')
+                throw new Error(error.error || 'PDF出力に失敗しました')
             }
-            setMessage({ type: 'success', text: 'シフト表をメールで送信しました' })
+
+            const blob = await res.blob()
+            const url = window.URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.href = url
+            a.download = `シフト管理表_${targetYearMonth}.pdf`
+            document.body.appendChild(a)
+            a.click()
+            document.body.removeChild(a)
+            window.URL.revokeObjectURL(url)
+
+            setMessage({ type: 'success', text: 'シフト表PDFを出力しました' })
         } catch (error) {
-            setMessage({ type: 'error', text: error instanceof Error ? error.message : '送信エラー' })
+            setMessage({ type: 'error', text: error instanceof Error ? error.message : 'PDF出力エラー' })
         } finally {
             setProcessingId(null)
         }
@@ -263,7 +272,7 @@ export default function AdminShiftsPage() {
                 )}
 
                 <div className="card">
-                    <div className="flex gap-4 mb-6 items-end">
+                    <div className="flex gap-4 mb-6 items-end justify-between">
                         <div>
                             <label className="block text-sm font-medium text-slate-700 mb-1">対象年月</label>
                             <input
@@ -273,6 +282,13 @@ export default function AdminShiftsPage() {
                                 className="input"
                             />
                         </div>
+                        <button
+                            className="btn btn-primary"
+                            disabled={processingId === 'export_pdf' || requests.length === 0}
+                            onClick={handleExportMonthlyPdf}
+                        >
+                            {processingId === 'export_pdf' ? '出力中...' : '月次シフト表PDFを出力'}
+                        </button>
                     </div>
 
                     {/* タブ */}
@@ -281,13 +297,13 @@ export default function AdminShiftsPage() {
                             className={`pb-3 font-medium text-sm border-b-2 px-1 transition-colors ${activeTab === 'calendar' ? 'border-primary-600 text-primary-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
                             onClick={() => setActiveTab('calendar')}
                         >
-                            📅 カレンダーで確認
+                            カレンダーで確認
                         </button>
                         <button
                             className={`pb-3 font-medium text-sm border-b-2 px-1 transition-colors ${activeTab === 'details' ? 'border-primary-600 text-primary-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
                             onClick={() => setActiveTab('details')}
                         >
-                            📋 詳細表示 (一覧)
+                            詳細表示 (一覧)
                         </button>
                     </div>
 
@@ -307,11 +323,11 @@ export default function AdminShiftsPage() {
                                         const isCurrentMonth = targetYearMonth ? isSameMonth(day, new Date(targetYearMonth)) : true
 
                                         return (
-                                            <div key={dateStr} className={`min-h-[120px] bg-white p-1 hover:bg-slate-50 transition-colors ${!isCurrentMonth ? 'opacity-40 bg-slate-50' : ''}`}>
+                                            <div key={dateStr} className={`min-h-[140px] h-full flex flex-col bg-white p-1 hover:bg-slate-50 transition-colors border-b border-r border-slate-100 ${!isCurrentMonth ? 'opacity-40 bg-slate-50' : ''}`}>
                                                 <div className="text-right text-xs font-medium text-slate-500 mb-1 p-1">
                                                     {format(day, 'd')}
                                                 </div>
-                                                <div className="space-y-1">
+                                                <div className="space-y-1 flex-1 overflow-visible">
                                                     {dayEntries.map((item: { entry: ShiftRequest['shiftEntries'][0], employee: Employee, status: string }, i: number) => {
                                                         const isRest = item.entry.isRest
                                                         const hasNote = !!item.entry.note
@@ -322,12 +338,12 @@ export default function AdminShiftsPage() {
                                                                 className={`text-xs p-1.5 rounded cursor-pointer leading-tight border transition-shadow hover:shadow-sm
                                                                     ${isRest ? 'bg-red-50 border-red-100 text-red-700' : 'bg-blue-50 border-blue-100 text-blue-700'}`}
                                                             >
-                                                                <div className="font-bold truncate">{item.employee.name}</div>
+                                                                <div className="font-bold truncate" title={item.employee.name}>{item.employee.name}</div>
                                                                 <div className="flex items-center justify-between mt-0.5">
                                                                     <span className="opacity-90">
                                                                         {isRest ? '(休)' : `${item.entry.startTime ? format(new Date(item.entry.startTime), 'HH:mm') : ''}-${item.entry.endTime ? format(new Date(item.entry.endTime), 'HH:mm') : ''}`}
                                                                     </span>
-                                                                    {hasNote && <span title="メモあり">📝</span>}
+                                                                    {hasNote && <span title="メモあり" className="inline-block px-1 ml-1 text-[10px] bg-yellow-100 text-yellow-800 rounded border border-yellow-200">メモ</span>}
                                                                 </div>
                                                             </div>
                                                         )
@@ -392,7 +408,7 @@ export default function AdminShiftsPage() {
                                                     </td>
                                                     <td className="p-4">
                                                         <div className="flex gap-2">
-                                                            {req.status !== 'CONFIRMED' && (
+                                                            {req.status !== 'CONFIRMED' ? (
                                                                 <button
                                                                     className="btn btn-sm btn-primary"
                                                                     disabled={processingId === req.id}
@@ -400,15 +416,8 @@ export default function AdminShiftsPage() {
                                                                 >
                                                                     {processingId === req.id ? '処理中...' : '承認・確定'}
                                                                 </button>
-                                                            )}
-                                                            {req.status === 'CONFIRMED' && (
-                                                                <button
-                                                                    className="btn btn-sm btn-secondary"
-                                                                    disabled={processingId === req.id + '_pdf'}
-                                                                    onClick={() => handleSendPdf(req.id)}
-                                                                >
-                                                                    {processingId === req.id + '_pdf' ? '送信中...' : 'PDFをメール送信'}
-                                                                </button>
+                                                            ) : (
+                                                                <span className="text-sm font-medium text-slate-400">操作なし</span>
                                                             )}
                                                         </div>
                                                     </td>
@@ -458,10 +467,9 @@ export default function AdminShiftsPage() {
                                 <label className="text-xs font-semibold text-slate-400 mb-2 block">申請内容</label>
                                 <p className="font-bold text-xl">
                                     {selectedEntry.entry.isRest ? (
-                                        <span className="text-red-500 flex items-center gap-2"><span className="text-xl">🏖️</span> 休み希望</span>
+                                        <span className="text-red-500 flex items-center gap-2">休み希望</span>
                                     ) : (
                                         <span className="text-primary-600 flex items-center gap-2">
-                                            <span className="text-xl">⏱️</span>
                                             {selectedEntry.entry.startTime ? format(new Date(selectedEntry.entry.startTime), 'HH:mm') : '--:--'}
                                             <span className="text-slate-300 mx-1">/</span>
                                             {selectedEntry.entry.endTime ? format(new Date(selectedEntry.entry.endTime), 'HH:mm') : '--:--'}
