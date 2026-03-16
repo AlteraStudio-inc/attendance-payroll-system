@@ -104,9 +104,6 @@ export default function AdminDashboard() {
                     <Link href="/admin/employees/new" className="btn btn-secondary">
                         従業員追加
                     </Link>
-                    <Link href="/admin/calendar" className="btn btn-secondary">
-                        カレンダー設定
-                    </Link>
                     <Link href="/admin/payroll" className="btn btn-secondary">
                         給与計算
                     </Link>

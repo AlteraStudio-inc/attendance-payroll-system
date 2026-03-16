@@ -543,63 +543,298 @@ export async function generateShiftPdfData(shiftDataList: any[], yearMonth: stri
 }
 
 // -------------------------------------------------------------
-// 営業カレンダーPDF生成
+// 賃金台帳PDF生成（様式第20号準拠）
 // -------------------------------------------------------------
-export async function generateBusinessCalendarPdfData(calendarData: any[], yearMonth: string): Promise<Buffer> {
-  const [year, month] = yearMonth.split('-')
+export interface WageLedgerEntry {
+  yearMonth: string
+  workDays: number
+  workHours: number
+  overtimeHours: number
+  holidayHours: number
+  lateNightHours: number
+  baseSalary: number
+  overtimePay: number
+  holidayPay: number
+  deemedOvertimePay: number
+  grossSalary: number
+  socialInsurance: number
+  employmentInsurance: number
+  incomeTax: number
+  totalDeductions: number
+  netSalary: number
+}
+
+export interface WageLedgerData {
+  employeeCode: string
+  employeeName: string
+  jobType?: string
+  entries: WageLedgerEntry[]
+}
+
+function generateWageLedgerHtml(data: WageLedgerData): string {
+  const formatCurrency = (amount: number) => amount === 0 ? '0' : amount.toLocaleString()
+
+  let jobTitle = ''
+  if (data.jobType === 'CONSTRUCTION') jobTitle = '建設部門'
+  else if (data.jobType === 'NAIL') jobTitle = 'ネイルサロン部門'
+  else if (data.jobType === 'EYELASH') jobTitle = 'アイラッシュ部門'
+  else if (data.jobType === 'SUPPORT') jobTitle = '就労支援部門'
 
   let rowsHtml = ''
-  calendarData.forEach(day => {
-    const dateObj = new Date(day.date)
-    const dayStr = `${dateObj.getDate()}日`
-    const dayNames = ['日', '月', '火', '水', '木', '金', '土']
-    const dayOfWeekStr = dayNames[day.dayOfWeek]
-    const typeStr = day.isHoliday ? '<span style="color:red">休日</span>' : '営業日'
-    const noteStr = day.note || ''
+  let totalWorkDays = 0, totalWorkHours = 0, totalOvertimeHours = 0
+  let totalHolidayHours = 0, totalLateNightHours = 0
+  let totalBaseSalary = 0, totalOvertimePay = 0, totalHolidayPay = 0
+  let totalDeemedOvertimePay = 0, totalGrossSalary = 0
+  let totalSocialInsurance = 0, totalEmploymentInsurance = 0
+  let totalIncomeTax = 0, totalDeductions = 0, totalNetSalary = 0
 
-    rowsHtml += `<tr>
-        <td>${dayStr} (${dayOfWeekStr})</td>
-        <td>${typeStr}</td>
-        <td>${noteStr}</td>
-    </tr>`
-  })
+  for (const entry of data.entries) {
+    const [y, m] = entry.yearMonth.split('-')
+    totalWorkDays += entry.workDays
+    totalWorkHours += entry.workHours
+    totalOvertimeHours += entry.overtimeHours
+    totalHolidayHours += entry.holidayHours
+    totalLateNightHours += entry.lateNightHours
+    totalBaseSalary += entry.baseSalary
+    totalOvertimePay += entry.overtimePay
+    totalHolidayPay += entry.holidayPay
+    totalDeemedOvertimePay += entry.deemedOvertimePay
+    totalGrossSalary += entry.grossSalary
+    totalSocialInsurance += entry.socialInsurance
+    totalEmploymentInsurance += entry.employmentInsurance
+    totalIncomeTax += entry.incomeTax
+    totalDeductions += entry.totalDeductions
+    totalNetSalary += entry.netSalary
 
-  const html = `
-    <!DOCTYPE html>
-    <html lang="ja">
-    <head>
-        <meta charset="UTF-8">
-        <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet">
-        <style>
-            body { font-family: 'Noto Sans JP', sans-serif; font-size: 12px; padding: 20mm; }
-            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-            th, td { border: 1px solid #333; padding: 6px; text-align: left; }
-            th { background-color: #f1f5f9; }
-        </style>
-    </head>
-    <body>
-        <h2>営業カレンダー (現場作業員適用) ${year}年${month}月</h2>
-        <table>
-            <thead>
-                <tr>
-                    <th>日付</th>
-                    <th>稼働/休日</th>
-                    <th>備考</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${rowsHtml}
-            </tbody>
-        </table>
-    </body>
-    </html>
+    rowsHtml += `
+      <tr>
+        <td class="period">${y}年${Number(m)}月</td>
+        <td class="num">${entry.workDays}</td>
+        <td class="num">${entry.workHours.toFixed(1)}</td>
+        <td class="num">${entry.overtimeHours.toFixed(1)}</td>
+        <td class="num">${entry.holidayHours.toFixed(1)}</td>
+        <td class="num">${entry.lateNightHours.toFixed(1)}</td>
+        <td class="money">${formatCurrency(entry.baseSalary)}</td>
+        <td class="money">${formatCurrency(entry.overtimePay)}</td>
+        <td class="money">${formatCurrency(entry.holidayPay)}</td>
+        <td class="money">${formatCurrency(entry.deemedOvertimePay)}</td>
+        <td class="money total-col">${formatCurrency(entry.grossSalary)}</td>
+        <td class="money">${formatCurrency(entry.socialInsurance)}</td>
+        <td class="money">${formatCurrency(entry.employmentInsurance)}</td>
+        <td class="money">${formatCurrency(entry.incomeTax)}</td>
+        <td class="money total-col">${formatCurrency(entry.totalDeductions)}</td>
+        <td class="money net-col">${formatCurrency(entry.netSalary)}</td>
+      </tr>
     `
+  }
 
+  // 合計行
+  rowsHtml += `
+    <tr class="total-row">
+      <td class="period">合　計</td>
+      <td class="num">${totalWorkDays}</td>
+      <td class="num">${totalWorkHours.toFixed(1)}</td>
+      <td class="num">${totalOvertimeHours.toFixed(1)}</td>
+      <td class="num">${totalHolidayHours.toFixed(1)}</td>
+      <td class="num">${totalLateNightHours.toFixed(1)}</td>
+      <td class="money">${formatCurrency(totalBaseSalary)}</td>
+      <td class="money">${formatCurrency(totalOvertimePay)}</td>
+      <td class="money">${formatCurrency(totalHolidayPay)}</td>
+      <td class="money">${formatCurrency(totalDeemedOvertimePay)}</td>
+      <td class="money total-col">${formatCurrency(totalGrossSalary)}</td>
+      <td class="money">${formatCurrency(totalSocialInsurance)}</td>
+      <td class="money">${formatCurrency(totalEmploymentInsurance)}</td>
+      <td class="money">${formatCurrency(totalIncomeTax)}</td>
+      <td class="money total-col">${formatCurrency(totalDeductions)}</td>
+      <td class="money net-col">${formatCurrency(totalNetSalary)}</td>
+    </tr>
+  `
+
+  return `
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Noto Sans JP', sans-serif;
+      font-size: 9px;
+      line-height: 1.3;
+      padding: 10mm;
+      background: white;
+      color: #000;
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 15px;
+    }
+    .header h1 {
+      font-size: 20px;
+      font-weight: bold;
+      border: 2px solid #000;
+      display: inline-block;
+      padding: 8px 40px;
+      letter-spacing: 8px;
+    }
+    .company-name {
+      text-align: right;
+      font-size: 11px;
+      margin-bottom: 10px;
+    }
+    .info-section {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 15px;
+    }
+    .info-table {
+      border-collapse: collapse;
+      border: 1.5px solid #000;
+    }
+    .info-table th, .info-table td {
+      border: 1px solid #000;
+      padding: 4px 10px;
+      font-size: 10px;
+    }
+    .info-table th {
+      background-color: #f0f0f0;
+      font-weight: normal;
+      white-space: nowrap;
+    }
+    .main-table {
+      width: 100%;
+      border-collapse: collapse;
+      border: 2px solid #000;
+    }
+    .main-table th {
+      background-color: #f0f0f0;
+      border: 1px solid #000;
+      padding: 3px 2px;
+      text-align: center;
+      font-weight: normal;
+      font-size: 8px;
+      white-space: nowrap;
+    }
+    .main-table td {
+      border: 1px solid #000;
+      padding: 4px 3px;
+      height: 22px;
+      font-size: 9px;
+    }
+    .main-table .period {
+      text-align: center;
+      white-space: nowrap;
+      font-size: 9px;
+    }
+    .main-table .num {
+      text-align: right;
+      font-family: monospace;
+      padding-right: 5px;
+    }
+    .main-table .money {
+      text-align: right;
+      font-family: monospace;
+      padding-right: 5px;
+    }
+    .main-table .total-col {
+      background-color: #fafafa;
+      font-weight: bold;
+    }
+    .main-table .net-col {
+      background-color: #f0f7ff;
+      font-weight: bold;
+    }
+    .total-row {
+      background-color: #f5f5f5;
+      font-weight: bold;
+    }
+    .total-row td {
+      border-top: 2px solid #000;
+    }
+    .category-header {
+      text-align: center !important;
+      background-color: #e8e8e8 !important;
+      font-weight: bold !important;
+      font-size: 9px !important;
+    }
+    .note {
+      margin-top: 10px;
+      font-size: 8px;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+  <div class="company-name">${COMPANY_NAME}</div>
+  <div class="header">
+    <h1>賃金台帳</h1>
+  </div>
+
+  <div class="info-section">
+    <table class="info-table">
+      <tr>
+        <th>社員番号</th>
+        <td>${data.employeeCode}</td>
+        <th>氏　名</th>
+        <td style="min-width: 120px;">${data.employeeName}</td>
+      </tr>
+      <tr>
+        <th>部　署</th>
+        <td colspan="3">${jobTitle}</td>
+      </tr>
+    </table>
+  </div>
+
+  <table class="main-table">
+    <thead>
+      <tr>
+        <th rowspan="2" style="width: 70px;">賃金<br>計算期間</th>
+        <th colspan="5" class="category-header">勤　怠</th>
+        <th colspan="5" class="category-header">支　給</th>
+        <th colspan="4" class="category-header">控　除</th>
+        <th rowspan="2" style="width: 70px;">差引<br>支給額</th>
+      </tr>
+      <tr>
+        <th>労働<br>日数</th>
+        <th>労働<br>時間数</th>
+        <th>時間外<br>労働</th>
+        <th>休日<br>労働</th>
+        <th>深夜<br>労働</th>
+        <th>基本給</th>
+        <th>時間外<br>手当</th>
+        <th>休日<br>手当</th>
+        <th>みなし<br>残業</th>
+        <th>総支給額</th>
+        <th>社会<br>保険料</th>
+        <th>雇用<br>保険料</th>
+        <th>所得税</th>
+        <th>控除<br>合計</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rowsHtml}
+    </tbody>
+  </table>
+
+  <p class="note">※ 本帳簿は労働基準法第108条および同法施行規則第54条に基づき作成しています。</p>
+</body>
+</html>
+  `
+}
+
+export async function generateWageLedgerPdf(data: WageLedgerData): Promise<Buffer> {
+  const html = generateWageLedgerHtml(data)
   const browser = await getBrowser()
   try {
     const page = await browser.newPage()
     await page.setContent(html, { waitUntil: 'networkidle0' })
-    const pdf = await page.pdf({ format: 'A4', margin: { top: '10mm', bottom: '10mm', left: '10mm', right: '10mm' } })
+    const pdf = await page.pdf({
+      format: 'A4',
+      landscape: true,
+      printBackground: true,
+      margin: { top: '8mm', bottom: '8mm', left: '8mm', right: '8mm' },
+    })
     return Buffer.from(pdf)
   } finally {
     await browser.close()

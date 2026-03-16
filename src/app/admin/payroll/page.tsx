@@ -198,6 +198,30 @@ export default function PayrollPage() {
         }
     }
 
+    const handleGenerateWageLedger = async (employeeId: string) => {
+        setProcessing(true)
+        try {
+            const res = await fetch('/api/payroll/wage-ledger', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ yearMonth: currentMonth, employeeId }),
+            })
+
+            if (!res.ok) {
+                const data = await res.json()
+                throw new Error(data.error)
+            }
+
+            const blob = await res.blob()
+            const url = URL.createObjectURL(blob)
+            window.open(url, '_blank')
+        } catch (err) {
+            setError(err instanceof Error ? err.message : '賃金台帳の生成に失敗しました')
+        } finally {
+            setProcessing(false)
+        }
+    }
+
     const formatCurrency = (amount: number) => '¥' + amount.toLocaleString()
 
     const statusBadge = (status: string) => {
@@ -326,7 +350,7 @@ export default function PayrollPage() {
                                     <th className="text-right">総支給</th>
                                     <th className="text-right">控除</th>
                                     <th className="text-right">差引支給</th>
-                                    <th>PDF</th>
+                                    <th>書類</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -351,13 +375,22 @@ export default function PayrollPage() {
                                         <td className="text-right text-red-600">-{formatCurrency(item.totalDeductions)}</td>
                                         <td className="text-right font-bold text-primary-600">{formatCurrency(item.netSalary)}</td>
                                         <td>
-                                            <button
-                                                onClick={() => handleGeneratePdf(item.employeeId)}
-                                                disabled={processing}
-                                                className="text-primary-600 hover:text-primary-800 text-sm"
-                                            >
-                                                PDF
-                                            </button>
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={() => handleGeneratePdf(item.employeeId)}
+                                                    disabled={processing}
+                                                    className="text-primary-600 hover:text-primary-800 text-sm"
+                                                >
+                                                    明細
+                                                </button>
+                                                <button
+                                                    onClick={() => handleGenerateWageLedger(item.employeeId)}
+                                                    disabled={processing}
+                                                    className="text-green-600 hover:text-green-800 text-sm"
+                                                >
+                                                    台帳
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                 ))}

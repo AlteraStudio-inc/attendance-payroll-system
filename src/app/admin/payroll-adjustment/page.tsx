@@ -189,6 +189,56 @@ export default function PayrollAdjustmentPage() {
         })
     }
 
+    const [pdfProcessing, setPdfProcessing] = useState<Record<string, boolean>>({})
+
+    const handleGeneratePdf = async (employeeId: string) => {
+        setPdfProcessing((prev) => ({ ...prev, [employeeId]: true }))
+        try {
+            const res = await fetch('/api/payroll/pdf', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ yearMonth: currentMonth, employeeId }),
+            })
+
+            if (!res.ok) {
+                const data = await res.json()
+                throw new Error(data.error)
+            }
+
+            const blob = await res.blob()
+            const url = URL.createObjectURL(blob)
+            window.open(url, '_blank')
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'PDF生成に失敗しました')
+        } finally {
+            setPdfProcessing((prev) => ({ ...prev, [employeeId]: false }))
+        }
+    }
+
+    const handleGenerateWageLedger = async (employeeId: string) => {
+        setPdfProcessing((prev) => ({ ...prev, [employeeId]: true }))
+        try {
+            const res = await fetch('/api/payroll/wage-ledger', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ yearMonth: currentMonth, employeeId }),
+            })
+
+            if (!res.ok) {
+                const data = await res.json()
+                throw new Error(data.error)
+            }
+
+            const blob = await res.blob()
+            const url = URL.createObjectURL(blob)
+            window.open(url, '_blank')
+        } catch (err) {
+            setError(err instanceof Error ? err.message : '賃金台帳の生成に失敗しました')
+        } finally {
+            setPdfProcessing((prev) => ({ ...prev, [employeeId]: false }))
+        }
+    }
+
     const formatCurrency = (amount: number) => '¥' + amount.toLocaleString()
 
     const statusBadge = (status: string) => {
@@ -311,6 +361,28 @@ export default function PayrollAdjustmentPage() {
                                         )}
                                     </div>
                                     <div className="flex items-center gap-6">
+                                        <div className="flex gap-2 items-center">
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation()
+                                                    handleGeneratePdf(item.employeeId)
+                                                }}
+                                                disabled={pdfProcessing[item.employeeId]}
+                                                className="text-primary-600 hover:text-primary-800 text-xs px-2 py-1 border border-primary-200 rounded hover:bg-primary-50 transition-colors"
+                                            >
+                                                給与明細
+                                            </button>
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation()
+                                                    handleGenerateWageLedger(item.employeeId)
+                                                }}
+                                                disabled={pdfProcessing[item.employeeId]}
+                                                className="text-green-600 hover:text-green-800 text-xs px-2 py-1 border border-green-200 rounded hover:bg-green-50 transition-colors"
+                                            >
+                                                賃金台帳
+                                            </button>
+                                        </div>
                                         <div className="text-right hidden sm:block">
                                             <div className="text-xs text-slate-500">差引支給額</div>
                                             <div className="font-bold text-primary-600">
