@@ -18,6 +18,7 @@ const navItems = [
     { href: '/admin/requests', label: '申請管理' },
     { href: '/admin/calendar', label: '営業カレンダー' },
     { href: '/admin/payroll', label: '給与管理' },
+    { href: '/admin/payroll-adjustment', label: '前月修正' },
 ]
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
