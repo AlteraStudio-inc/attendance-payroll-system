@@ -37,17 +37,17 @@ async function main() {
       breakStartTime: null,
       breakEndTime: null,
       breakMinutes: 60,
-      scheduledWorkMinutesPerDay: 450, // 7h30m
+      scheduledWorkMinutesPerDay: 450,
       annualWorkDays: 258,
       annualHolidays: 107,
-      annualWorkMinutes: 258 * 450, // 116100
-      monthlyAverageWorkMinutes: 9675, // 161h15m = 9675min
+      annualWorkMinutes: 258 * 450,
+      monthlyAverageWorkMinutes: 9675,
       allowWithinScheduledOvertime: true,
       overtimeBoundaryType: 'daily_8h',
       overtimeBoundaryMinutes: null,
       lateDeductionStartTime: '09:45',
       earlyLeaveDeductionBeforeTime: '18:00',
-      noEarlyLeaveDeductionAfterTime: '18:00', // 18:00以降退社なら早退控除なし
+      noEarlyLeaveDeductionAfterTime: '18:00',
       fixedOvertimeEnabled: false,
       fixedOvertimeMinutes: 0,
       fixedOvertimeAllowanceName: null,
@@ -71,11 +71,11 @@ async function main() {
       breakStartTime: '12:00',
       breakEndTime: '13:00',
       breakMinutes: 60,
-      scheduledWorkMinutesPerDay: 480, // 8h
+      scheduledWorkMinutesPerDay: 480,
       annualWorkDays: 240,
       annualHolidays: 125,
-      annualWorkMinutes: 240 * 480, // 115200
-      monthlyAverageWorkMinutes: 9600, // 160h = 9600min
+      annualWorkMinutes: 240 * 480,
+      monthlyAverageWorkMinutes: 9600,
       allowWithinScheduledOvertime: false,
       overtimeBoundaryType: 'daily_8h',
       overtimeBoundaryMinutes: null,
@@ -83,7 +83,7 @@ async function main() {
       earlyLeaveDeductionBeforeTime: '18:00',
       noEarlyLeaveDeductionAfterTime: null,
       fixedOvertimeEnabled: true,
-      fixedOvertimeMinutes: 1405, // 約23h25m
+      fixedOvertimeMinutes: 1405,
       fixedOvertimeAllowanceName: '職務手当',
       averageWorkTimeRoundingRule: 'round',
       payRoundingRule: 'round',
@@ -105,11 +105,11 @@ async function main() {
       breakStartTime: '12:00',
       breakEndTime: '13:00',
       breakMinutes: 60,
-      scheduledWorkMinutesPerDay: 480, // 8h
+      scheduledWorkMinutesPerDay: 480,
       annualWorkDays: 253,
       annualHolidays: 112,
-      annualWorkMinutes: 253 * 480, // 121440
-      monthlyAverageWorkMinutes: 10119, // 168.66h = 10119.6 → 小数点第2位切捨て → 168.66h → 10119min (168*60+39.6=10119)
+      annualWorkMinutes: 253 * 480,
+      monthlyAverageWorkMinutes: 10119,
       allowWithinScheduledOvertime: false,
       overtimeBoundaryType: 'daily_8h',
       overtimeBoundaryMinutes: null,
@@ -117,7 +117,7 @@ async function main() {
       earlyLeaveDeductionBeforeTime: '17:00',
       noEarlyLeaveDeductionAfterTime: null,
       fixedOvertimeEnabled: true,
-      fixedOvertimeMinutes: 2700, // 45h
+      fixedOvertimeMinutes: 2700,
       fixedOvertimeAllowanceName: '職務手当',
       averageWorkTimeRoundingRule: 'floor',
       payRoundingRule: 'ceil',
@@ -202,7 +202,7 @@ async function main() {
   const empPasswordHash = await bcrypt.hash('password', 12)
   const empPinHash = await bcrypt.hash('1234', 10)
 
-  // ネイル部門
+  // --- ネイル部門 ---
   const nailEmp = await prisma.employee.upsert({
     where: { employeeCode: 'NAIL001' },
     update: {},
@@ -230,6 +230,8 @@ async function main() {
       isActive: true,
     },
   })
+  // Salary setting (idempotent: delete existing first)
+  await prisma.employeeSalarySetting.deleteMany({ where: { employeeId: nailEmp.id } })
   await prisma.employeeSalarySetting.create({
     data: {
       employeeId: nailEmp.id,
@@ -245,7 +247,7 @@ async function main() {
     },
   })
 
-  // 本部
+  // --- 本部 ---
   const hqEmp = await prisma.employee.upsert({
     where: { employeeCode: 'HQ001' },
     update: {},
@@ -273,6 +275,7 @@ async function main() {
       isActive: true,
     },
   })
+  await prisma.employeeSalarySetting.deleteMany({ where: { employeeId: hqEmp.id } })
   await prisma.employeeSalarySetting.create({
     data: {
       employeeId: hqEmp.id,
@@ -280,7 +283,7 @@ async function main() {
       monthlySalary: 355000,
       baseSalary: 300000,
       jobAllowance: 55000,
-      includeJobAllowanceInBaseWage: false, // 職務手当は固定残業代のため基礎賃金非算入
+      includeJobAllowanceInBaseWage: false,
       fixedOvertimeAllowance: 55000,
       fixedOvertimeMinutes: 1405,
       socialInsuranceEnrolled: true,
@@ -291,7 +294,7 @@ async function main() {
     },
   })
 
-  // 建設部門
+  // --- 建設部門 ---
   const constEmp = await prisma.employee.upsert({
     where: { employeeCode: 'CONST001' },
     update: {},
@@ -319,6 +322,7 @@ async function main() {
       isActive: true,
     },
   })
+  await prisma.employeeSalarySetting.deleteMany({ where: { employeeId: constEmp.id } })
   await prisma.employeeSalarySetting.create({
     data: {
       employeeId: constEmp.id,
@@ -328,7 +332,7 @@ async function main() {
       jobAllowance: 81000,
       includeJobAllowanceInBaseWage: false,
       fixedOvertimeAllowance: 81000,
-      fixedOvertimeMinutes: 2700, // 45h
+      fixedOvertimeMinutes: 2700,
       familyAllowance: 10000,
       socialInsuranceEnrolled: true,
       nursingCareInsuranceApplicable: true,
@@ -342,14 +346,14 @@ async function main() {
   console.log('✅ Sample employees: NAIL001, HQ001, CONST001 (password / PIN: 1234)')
 
   // =============================================
-  // 法定控除マスタ (2025年度)
+  // 法定控除マスタ (2025年度, 2026年度)
   // =============================================
   await prisma.statutoryRateMaster.upsert({
     where: { fiscalYear: 2025 },
     update: {},
     create: {
       fiscalYear: 2025,
-      healthInsuranceRate: 0.0998, // 東京都 協会けんぽ
+      healthInsuranceRate: 0.0998,
       nursingCareInsuranceRate: 0.0160,
       welfarePensionRate: 0.1830,
       childSupportRate: 0.0036,
@@ -417,8 +421,10 @@ async function main() {
   // =============================================
   // 所得税テーブル (一部サンプル, 2025年度, 甲欄)
   // =============================================
+  // Delete existing to avoid duplicates on re-run
+  await prisma.incomeTaxTable.deleteMany({ where: { fiscalYear: 2025 } })
+
   const taxData = [
-    // 扶養0人
     { from: 0, to: 88000, deps: 0, tax: 0 },
     { from: 88000, to: 89000, deps: 0, tax: 130 },
     { from: 150000, to: 153000, deps: 0, tax: 2980 },
@@ -428,13 +434,11 @@ async function main() {
     { from: 350000, to: 353000, deps: 0, tax: 11120 },
     { from: 400000, to: 403000, deps: 0, tax: 14650 },
     { from: 500000, to: 503000, deps: 0, tax: 24500 },
-    // 扶養1人
     { from: 0, to: 88000, deps: 1, tax: 0 },
     { from: 150000, to: 153000, deps: 1, tax: 1610 },
     { from: 200000, to: 203000, deps: 1, tax: 3200 },
     { from: 300000, to: 303000, deps: 1, tax: 6850 },
     { from: 400000, to: 403000, deps: 1, tax: 12900 },
-    // 扶養2人
     { from: 0, to: 88000, deps: 2, tax: 0 },
     { from: 200000, to: 203000, deps: 2, tax: 1720 },
     { from: 300000, to: 303000, deps: 2, tax: 5290 },
@@ -471,28 +475,26 @@ async function main() {
     if (dow === 0) dayType = 'legal_holiday'
     else if (dow === 6) dayType = 'scheduled_holiday'
 
-    await prisma.workSchedule.upsert({
-      where: {
-        companyId_departmentId_targetDate: {
-          companyId: company.id,
-          departmentId: null as any, // company-level
-          targetDate: date,
-        },
-      },
-      update: {},
-      create: {
-        companyId: company.id,
-        departmentId: null,
-        targetDate: date,
-        dayType,
-        note: dow === 0 ? '日曜日' : dow === 6 ? '土曜日' : null,
-      },
+    // Use findFirst + create/update to handle nullable departmentId
+    const existing = await prisma.workSchedule.findFirst({
+      where: { companyId: company.id, departmentId: null, targetDate: date },
     })
+    if (!existing) {
+      await prisma.workSchedule.create({
+        data: {
+          companyId: company.id,
+          departmentId: null,
+          targetDate: date,
+          dayType,
+          note: dow === 0 ? '日曜日' : dow === 6 ? '土曜日' : null,
+        },
+      })
+    }
   }
   console.log('✅ Work schedules for current month')
 
   // =============================================
-  // サンプル勤怠データ (今月5日分)
+  // サンプル勤怠データ (今月の平日5日分)
   // =============================================
   const sampleEmployees = [
     { emp: nailEmp, clockIn: '09:45', clockOut: '18:15', breakMin: 60 },
@@ -512,20 +514,24 @@ async function main() {
       const rawMin = (clockOutAt.getTime() - clockInAt.getTime()) / 60000
       const netMin = rawMin - breakMin
 
-      await prisma.attendanceRecord.upsert({
-        where: { employeeId_workDate: { employeeId: emp.id, workDate } },
-        update: {},
-        create: {
-          employeeId: emp.id,
-          workDate,
-          clockInAt,
-          clockOutAt,
-          breakMinutes: breakMin,
-          workedMinutesRaw: Math.round(rawMin),
-          workedMinutesNet: Math.round(netMin),
-          status: 'confirmed',
-        },
+      // Use findFirst to avoid compound unique issues
+      const existingRecord = await prisma.attendanceRecord.findFirst({
+        where: { employeeId: emp.id, workDate },
       })
+      if (!existingRecord) {
+        await prisma.attendanceRecord.create({
+          data: {
+            employeeId: emp.id,
+            workDate,
+            clockInAt,
+            clockOutAt,
+            breakMinutes: breakMin,
+            workedMinutesRaw: Math.round(rawMin),
+            workedMinutesNet: Math.round(netMin),
+            status: 'confirmed',
+          },
+        })
+      }
     }
   }
   console.log('✅ Sample attendance records')
