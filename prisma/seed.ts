@@ -548,7 +548,8 @@ async function main() {
 
 main()
   .catch((e) => {
-    console.error(e)
+    console.error('❌ Seed failed:', e.message)
+    console.error('Stack:', e.stack)
     process.exit(1)
   })
   .finally(async () => {
