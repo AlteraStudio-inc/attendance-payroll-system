@@ -1,74 +1,52 @@
 import { prisma } from './prisma'
-import { type AuthUser } from './auth'
-
-export type AuditAction =
-    | 'CREATE'
-    | 'UPDATE'
-    | 'DELETE'
-    | 'LOGIN'
-    | 'LOGOUT'
-    | 'CLOCK_IN'
-    | 'CLOCK_OUT'
-    | 'APPROVE'
-    | 'REJECT'
-    | 'CONFIRM'
-    | 'REVERT'
-    | 'BULK_SEND'
-    | 'RETRY'
+import type { AuthUser } from './auth'
+import type { ActorType } from '@prisma/client'
 
 export interface AuditLogData {
-    userId: string
-    action: AuditAction
-    targetType: string
-    targetId: string
-    oldValue?: Record<string, unknown> | null
-    newValue?: Record<string, unknown> | null
-    ipAddress?: string | null
+  actorType: ActorType
+  actorId: string
+  action: string
+  targetType: string
+  targetId: string
+  beforeJson?: Record<string, unknown> | null
+  afterJson?: Record<string, unknown> | null
+  metadataJson?: Record<string, unknown> | null
 }
 
-// 監査ログを作成（SQLite対応: オブジェクトをJSON文字列に変換）
 export async function createAuditLog(data: AuditLogData): Promise<void> {
-    await prisma.auditLog.create({
-        data: {
-            userId: data.userId,
-            action: data.action,
-            targetType: data.targetType,
-            targetId: data.targetId,
-            oldValue: data.oldValue ? JSON.stringify(data.oldValue) : null,
-            newValue: data.newValue ? JSON.stringify(data.newValue) : null,
-            ipAddress: data.ipAddress ?? null,
-        },
-    })
+  await prisma.auditLog.create({
+    data: {
+      actorType: data.actorType,
+      actorId: data.actorId,
+      action: data.action,
+      targetType: data.targetType,
+      targetId: data.targetId,
+      beforeJson: data.beforeJson ? JSON.stringify(data.beforeJson) : null,
+      afterJson: data.afterJson ? JSON.stringify(data.afterJson) : null,
+      metadataJson: data.metadataJson ? JSON.stringify(data.metadataJson) : null,
+    },
+  })
 }
 
-// リクエストからIPアドレスを取得
-export function getIpAddress(request: Request): string | null {
-    const forwarded = request.headers.get('x-forwarded-for')
-    if (forwarded) {
-        return forwarded.split(',')[0].trim()
-    }
-    return request.headers.get('x-real-ip') ?? null
-}
-
-// ユーザー情報から監査ログを作成するヘルパー
 export async function logAction(
-    user: AuthUser,
-    action: AuditAction,
-    targetType: string,
-    targetId: string,
-    options?: {
-        oldValue?: Record<string, unknown> | null
-        newValue?: Record<string, unknown> | null
-        ipAddress?: string | null
-    }
+  user: AuthUser,
+  action: string,
+  targetType: string,
+  targetId: string,
+  options?: {
+    beforeJson?: Record<string, unknown> | null
+    afterJson?: Record<string, unknown> | null
+    metadataJson?: Record<string, unknown> | null
+  }
 ): Promise<void> {
-    await createAuditLog({
-        userId: user.id,
-        action,
-        targetType,
-        targetId,
-        oldValue: options?.oldValue,
-        newValue: options?.newValue,
-        ipAddress: options?.ipAddress,
-    })
+  await createAuditLog({
+    actorType: user.role === 'admin' ? 'admin' : 'employee',
+    actorId: user.id,
+    action,
+    targetType,
+    targetId,
+    beforeJson: options?.beforeJson,
+    afterJson: options?.afterJson,
+    metadataJson: options?.metadataJson,
+  })
 }

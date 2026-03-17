@@ -19,8 +19,8 @@ export default function EmployeePayslipsPage() {
             try {
                 const res = await fetch('/api/employee/payslips')
                 const data = await res.json()
-                if (res.ok) {
-                    setPayslips(data.payslips || [])
+                if (res.ok && data.success) {
+                    setPayslips(data.data?.payslips || data.data || [])
                 }
             } catch (error) {
                 console.error('Failed to fetch:', error)
@@ -31,16 +31,14 @@ export default function EmployeePayslipsPage() {
         fetchPayslips()
     }, [])
 
-    const handleDownload = async (yearMonth: string) => {
+    const handleViewPdf = async (yearMonth: string) => {
         try {
             const res = await fetch(`/api/employee/payslips/${yearMonth}/pdf`)
             if (!res.ok) throw new Error('PDF取得に失敗しました')
-
             const blob = await res.blob()
             const url = URL.createObjectURL(blob)
             window.open(url, '_blank')
-        } catch (error) {
-            console.error('Failed to download:', error)
+        } catch {
             alert('PDFの取得に失敗しました')
         }
     }
@@ -52,41 +50,58 @@ export default function EmployeePayslipsPage() {
         return `${year}年${parseInt(month)}月`
     }
 
+    const statusLabel = (status: string) => {
+        switch (status) {
+            case 'confirmed': return { label: '確定', color: 'bg-green-100 text-green-700' }
+            case 'draft': return { label: '下書き', color: 'bg-slate-100 text-slate-600' }
+            default: return { label: status, color: 'bg-slate-100 text-slate-600' }
+        }
+    }
+
     return (
         <div className="space-y-4">
             <h1 className="text-xl font-bold text-slate-800">給与明細</h1>
 
             {loading ? (
                 <div className="flex justify-center py-8">
-                    <div className="spinner w-8 h-8"></div>
+                    <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
                 </div>
             ) : payslips.length === 0 ? (
-                <p className="text-center text-slate-500 py-8">給与明細がありません</p>
+                <div className="text-center py-12 text-slate-500">
+                    <div className="text-4xl mb-3">💴</div>
+                    <p>給与明細がありません</p>
+                </div>
             ) : (
-                <div className="space-y-2">
-                    {payslips.map((p) => (
-                        <div key={p.id} className="card p-4">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <div className="font-bold text-slate-800">{formatYearMonth(p.yearMonth)}</div>
-                                    <div className="text-sm text-slate-500">
-                                        総支給 {formatCurrency(p.grossSalary)}
+                <div className="space-y-3">
+                    {payslips.map((p) => {
+                        const s = statusLabel(p.status)
+                        return (
+                            <div key={p.id} className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+                                <div className="flex items-start justify-between">
+                                    <div>
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <span className="font-bold text-slate-800 text-lg">{formatYearMonth(p.yearMonth)}</span>
+                                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${s.color}`}>{s.label}</span>
+                                        </div>
+                                        <div className="text-sm text-slate-500">
+                                            総支給額 {formatCurrency(p.grossSalary)}
+                                        </div>
                                     </div>
-                                </div>
-                                <div className="text-right">
-                                    <div className="text-lg font-bold text-primary-600">
-                                        {formatCurrency(p.netSalary)}
+                                    <div className="text-right">
+                                        <div className="text-xl font-bold text-blue-600 mb-1">
+                                            {formatCurrency(p.netSalary)}
+                                        </div>
+                                        <button
+                                            onClick={() => handleViewPdf(p.yearMonth)}
+                                            className="text-sm text-blue-600 hover:text-blue-800 font-medium transition-colors"
+                                        >
+                                            PDF表示
+                                        </button>
                                     </div>
-                                    <button
-                                        onClick={() => handleDownload(p.yearMonth)}
-                                        className="text-sm text-primary-600 hover:text-primary-800 mt-1"
-                                    >
-                                        PDF表示
-                                    </button>
                                 </div>
                             </div>
-                        </div>
-                    ))}
+                        )
+                    })}
                 </div>
             )}
         </div>

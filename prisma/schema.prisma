@@ -1,8 +1,8 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
+// Prisma schema for 勤怠・給与計算システム
+// 仕様書 ■11 DB定義 に準拠
 
 generator client {
-  provider   = "prisma-client-js"
+  provider = "prisma-client-js"
 }
 
 datasource db {
@@ -11,250 +11,569 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+// =============================================
+// 11-1. companies - 会社基本設定
+// =============================================
+model Company {
+  id                String   @id @default(uuid())
+  name              String
+  payrollClosingDay Int      @default(25) @map("payroll_closing_day")
+  payrollPaymentDay Int      @default(25) @map("payroll_payment_day")
+  timezone          String   @default("Asia/Tokyo")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
 
-// 従業員テーブル
+  departments   Department[]
+  employees     Employee[]
+  workSchedules WorkSchedule[]
+  payrollRuns   PayrollRun[]
+
+  @@map("companies")
+}
+
+// =============================================
+// 11-2. users - 認証主体
+// =============================================
+model User {
+  id           String    @id @default(uuid())
+  role         UserRole  @default(employee)
+  email        String?   @unique
+  passwordHash String    @map("password_hash")
+  employeeId   String?   @unique @map("employee_id")
+  isActive     Boolean   @default(true) @map("is_active")
+  lastLoginAt  DateTime? @map("last_login_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  employee Employee? @relation(fields: [employeeId], references: [id])
+
+  // 監査ログ
+  auditLogs AuditLog[]
+
+  @@map("users")
+}
+
+enum UserRole {
+  admin
+  employee
+}
+
+// =============================================
+// 11-3. departments - 部門設定
+// =============================================
+model Department {
+  id                             String              @id @default(uuid())
+  companyId                      String              @map("company_id")
+  code                           String              @unique
+  name                           String
+  startTime                      String              @map("start_time") // "HH:mm"
+  endTime                        String              @map("end_time")
+  breakStartTime                 String?             @map("break_start_time")
+  breakEndTime                   String?             @map("break_end_time")
+  breakMinutes                   Int                 @map("break_minutes")
+  scheduledWorkMinutesPerDay     Int                 @map("scheduled_work_minutes_per_day")
+  annualWorkDays                 Int                 @map("annual_work_days")
+  annualHolidays                 Int                 @map("annual_holidays")
+  annualWorkMinutes              Int                 @map("annual_work_minutes")
+  monthlyAverageWorkMinutes      Int                 @map("monthly_average_work_minutes")
+  allowWithinScheduledOvertime   Boolean             @default(false) @map("allow_within_scheduled_overtime")
+  overtimeBoundaryType           OvertimeBoundaryType @default(daily_8h) @map("overtime_boundary_type")
+  overtimeBoundaryMinutes        Int?                @map("overtime_boundary_minutes")
+  lateDeductionStartTime         String              @map("late_deduction_start_time")
+  earlyLeaveDeductionBeforeTime  String              @map("early_leave_deduction_before_time")
+  noEarlyLeaveDeductionAfterTime String?             @map("no_early_leave_deduction_after_time")
+  fixedOvertimeEnabled           Boolean             @default(false) @map("fixed_overtime_enabled")
+  fixedOvertimeMinutes           Int                 @default(0) @map("fixed_overtime_minutes")
+  fixedOvertimeAllowanceName     String?             @map("fixed_overtime_allowance_name")
+  averageWorkTimeRoundingRule    RoundingRule        @default(floor) @map("average_work_time_rounding_rule")
+  payRoundingRule                RoundingRule        @default(round) @map("pay_rounding_rule")
+  deductionRoundingRule          RoundingRule        @default(floor) @map("deduction_rounding_rule")
+  lateNightEnabled               Boolean             @default(false) @map("late_night_enabled")
+  notes                          String?
+  createdAt                      DateTime            @default(now()) @map("created_at")
+  updatedAt                      DateTime            @updatedAt @map("updated_at")
+
+  company       Company        @relation(fields: [companyId], references: [id])
+  employees     Employee[]
+  workSchedules WorkSchedule[]
+
+  @@map("departments")
+}
+
+enum OvertimeBoundaryType {
+  daily_8h
+  scheduled_minutes
+  custom
+}
+
+enum RoundingRule {
+  ceil
+  floor
+  round
+}
+
+// =============================================
+// 11-4. employees - 従業員基本情報
+// =============================================
 model Employee {
-  id                    String   @id @default(uuid())
-  employeeCode          String   @unique @map("employee_code")
-  name                  String
-  email                 String
-  passwordHash          String   @map("password_hash")
-  pinHash               String?  @map("pin_hash")
-  role                  String   @default("EMPLOYEE")
-  jobType               String   @default("CONSTRUCTION") @map("job_type") // 追加: 職種 (CONSTRUCTION, NAIL, EYELASH, SUPPORT)
-  employmentType        String   @default("FULL_TIME") @map("employment_type")
-  wageType              String   @default("FIXED") @map("wage_type")
-  hourlyRate            Decimal? @map("hourly_rate")
-  monthlySalary         Decimal? @map("monthly_salary")
-  minimumWage           Decimal  @default(1000) @map("minimum_wage")
-  deemedOvertimeEnabled Boolean  @default(false) @map("deemed_overtime_enabled")
-  deemedOvertimeHours   Decimal  @default(0) @map("deemed_overtime_hours")
-  isActive              Boolean  @default(true) @map("is_active")
-  createdAt             DateTime @default(now()) @map("created_at")
-  updatedAt             DateTime @updatedAt @map("updated_at")
+  id             String          @id @default(uuid())
+  companyId      String          @map("company_id")
+  departmentId   String          @map("department_id")
+  employeeCode   String          @unique @map("employee_code")
+  name           String
+  email          String?
+  pinHash        String?         @map("pin_hash")
+  employmentType EmploymentType  @default(full_time) @map("employment_type")
+  payType        PayType         @default(monthly) @map("pay_type")
+  active         Boolean         @default(true)
+  joinDate       DateTime?       @map("join_date")
+  leaveDate      DateTime?       @map("leave_date")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
 
-  // リレーション
-  timeEntries           TimeEntry[]
-  workTimeRequests      WorkTimeRequest[]
-  paidLeaveRequests     PaidLeaveRequest[]
-  payrollItems          PayrollItem[]
-  emailLogs             EmailLog[]
-  auditLogsAsUser       AuditLog[]       @relation("AuditLogUser")
-  reviewedWorkRequests  WorkTimeRequest[] @relation("WorkTimeRequestReviewer")
-  reviewedLeaveRequests PaidLeaveRequest[] @relation("PaidLeaveRequestReviewer")
-  modifiedTimeEntries   TimeEntry[]      @relation("TimeEntryModifier")
-  confirmedPayrollRuns  PayrollRun[]     @relation("PayrollRunConfirmer")
-  
-  // シフトリレーション
-  shiftRequests         ShiftRequest[]
-  shiftEntries          ShiftEntry[]
+  company    Company    @relation(fields: [companyId], references: [id])
+  department Department @relation(fields: [departmentId], references: [id])
+  user       User?
+
+  salarySettings              EmployeeSalarySetting[]
+  allowances                  EmployeeAllowance[]
+  attendanceRecords           AttendanceRecord[]
+  attendanceAdjustmentRequests AttendanceAdjustmentRequest[]
+  paidLeaveRequests           PaidLeaveRequest[]
+  payrollItems                PayrollItem[]
 
   @@map("employees")
 }
 
-// 勤怠記録テーブル
-model TimeEntry {
-  id            String    @id @default(uuid())
-  employeeId    String    @map("employee_id")
-  date          DateTime
-  clockIn       DateTime  @map("clock_in")
-  clockOut      DateTime? @map("clock_out")
-  note          String?   // 追加: 備考（現場名や出発地点など）
-  isHolidayWork Boolean   @default(false) @map("is_holiday_work")
-  isPaidLeave   Boolean   @default(false) @map("is_paid_leave")
-  modifiedById  String?   @map("modified_by")
-  modifiedAt    DateTime? @map("modified_at")
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
-
-  // リレーション
-  employee      Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  modifiedBy    Employee? @relation("TimeEntryModifier", fields: [modifiedById], references: [id])
-  workTimeRequests WorkTimeRequest[]
-
-  @@unique([employeeId, date])
-  @@map("time_entries")
+enum EmploymentType {
+  full_time
+  contract
+  part_time
+  temporary
 }
 
-// 労働時間修正申請テーブル
-model WorkTimeRequest {
-  id                String   @id @default(uuid())
-  employeeId        String   @map("employee_id")
-  timeEntryId       String   @map("time_entry_id")
-  requestedClockIn  DateTime @map("requested_clock_in")
-  requestedClockOut DateTime @map("requested_clock_out")
-  reason            String
-  status            String   @default("PENDING")
-  reviewedById      String?  @map("reviewed_by")
-  reviewedAt        DateTime? @map("reviewed_at")
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @updatedAt @map("updated_at")
-
-  // リレーション
-  employee          Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  timeEntry         TimeEntry @relation(fields: [timeEntryId], references: [id], onDelete: Cascade)
-  reviewedBy        Employee? @relation("WorkTimeRequestReviewer", fields: [reviewedById], references: [id])
-
-  @@map("work_time_requests")
+enum PayType {
+  monthly
+  hourly
 }
 
-// 有給申請テーブル
+// =============================================
+// 11-5. employee_salary_settings - 給与条件履歴
+// =============================================
+model EmployeeSalarySetting {
+  id                           String   @id @default(uuid())
+  employeeId                   String   @map("employee_id")
+  effectiveFrom                DateTime @map("effective_from")
+  effectiveTo                  DateTime? @map("effective_to")
+  monthlySalary                Int?     @map("monthly_salary")
+  hourlyRate                   Int?     @map("hourly_rate")
+  baseSalary                   Int?     @map("base_salary")
+  positionAllowance            Int?     @map("position_allowance")
+  jobAllowance                 Int?     @map("job_allowance")
+  familyAllowance              Int?     @map("family_allowance")
+  commutingAllowance           Int?     @map("commuting_allowance")
+  incentiveDefault             Int?     @map("incentive_default")
+  fixedOvertimeAllowance       Int?     @map("fixed_overtime_allowance")
+  fixedOvertimeMinutes         Int?     @map("fixed_overtime_minutes")
+  fixedOvertimeMinutesOverride Int?     @map("fixed_overtime_minutes_override")
+  includeJobAllowanceInBaseWage Boolean @default(false) @map("include_job_allowance_in_base_wage")
+  standardMonthlyRemuneration  Int?     @map("standard_monthly_remuneration")
+  socialInsuranceEnrolled      Boolean  @default(true) @map("social_insurance_enrolled")
+  nursingCareInsuranceApplicable Boolean @default(false) @map("nursing_care_insurance_applicable")
+  employmentInsuranceEnrolled  Boolean  @default(true) @map("employment_insurance_enrolled")
+  taxWithholdingType           String?  @map("tax_withholding_type") // "甲" or "乙"
+  dependentsCount              Int      @default(0) @map("dependents_count")
+  residentTaxMonthly           Int?     @map("resident_tax_monthly")
+  notes                        String?
+  createdAt                    DateTime @default(now()) @map("created_at")
+  updatedAt                    DateTime @updatedAt @map("updated_at")
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@map("employee_salary_settings")
+}
+
+// =============================================
+// 11-6. allowance_types - 手当種別マスタ
+// =============================================
+model AllowanceType {
+  id                  String            @id @default(uuid())
+  code                String            @unique
+  name                String
+  category            AllowanceCategory
+  includedInBaseWage  Boolean           @default(true) @map("included_in_base_wage")
+  exclusionReason     String?           @map("exclusion_reason")
+  calculationType     CalculationType   @default(fixed) @map("calculation_type")
+  isUniformPayment    Boolean           @default(false) @map("is_uniform_payment")
+  isActualCostBased   Boolean           @default(false) @map("is_actual_cost_based")
+  taxable             Boolean           @default(true)
+  socialInsuranceApplicable Boolean     @default(true) @map("social_insurance_applicable")
+  notes               String?
+  createdAt           DateTime          @default(now()) @map("created_at")
+  updatedAt           DateTime          @updatedAt @map("updated_at")
+
+  employeeAllowances EmployeeAllowance[]
+
+  @@map("allowance_types")
+}
+
+enum AllowanceCategory {
+  family
+  commuting
+  housing
+  position
+  incentive
+  fixed_overtime
+  other
+}
+
+enum CalculationType {
+  fixed
+  variable
+  formula
+}
+
+// =============================================
+// 11-7. employee_allowances - 従業員ごとの手当
+// =============================================
+model EmployeeAllowance {
+  id              String    @id @default(uuid())
+  employeeId      String    @map("employee_id")
+  allowanceTypeId String    @map("allowance_type_id")
+  amount          Int
+  effectiveFrom   DateTime  @map("effective_from")
+  effectiveTo     DateTime? @map("effective_to")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  employee      Employee      @relation(fields: [employeeId], references: [id])
+  allowanceType AllowanceType @relation(fields: [allowanceTypeId], references: [id])
+
+  @@map("employee_allowances")
+}
+
+// =============================================
+// 11-8. work_schedules - 営業日/休日設定
+// =============================================
+model WorkSchedule {
+  id           String       @id @default(uuid())
+  companyId    String       @map("company_id")
+  departmentId String?      @map("department_id")
+  targetDate   DateTime     @map("target_date")
+  dayType      DayType      @map("day_type")
+  note         String?
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+
+  company    Company     @relation(fields: [companyId], references: [id])
+  department Department? @relation(fields: [departmentId], references: [id])
+
+  @@unique([companyId, departmentId, targetDate])
+  @@map("work_schedules")
+}
+
+enum DayType {
+  business_day
+  scheduled_holiday
+  legal_holiday
+  special_holiday
+}
+
+// =============================================
+// 11-9. attendance_records - 日次勤怠記録
+// =============================================
+model AttendanceRecord {
+  id                              String           @id @default(uuid())
+  employeeId                      String           @map("employee_id")
+  workDate                        DateTime         @map("work_date")
+  clockInAt                       DateTime?        @map("clock_in_at")
+  clockOutAt                      DateTime?        @map("clock_out_at")
+  breakMinutes                    Int              @default(0) @map("break_minutes")
+  workedMinutesRaw                Int              @default(0) @map("worked_minutes_raw")
+  workedMinutesNet                Int              @default(0) @map("worked_minutes_net")
+  lateMinutes                     Int              @default(0) @map("late_minutes")
+  earlyLeaveMinutes               Int              @default(0) @map("early_leave_minutes")
+  absenceMinutes                  Int              @default(0) @map("absence_minutes")
+  withinScheduledOvertimeMinutes  Int              @default(0) @map("within_scheduled_overtime_minutes")
+  normalOvertimeMinutes           Int              @default(0) @map("normal_overtime_minutes")
+  scheduledHolidayMinutes         Int              @default(0) @map("scheduled_holiday_minutes")
+  legalHolidayMinutes             Int              @default(0) @map("legal_holiday_minutes")
+  lateNightMinutes                Int              @default(0) @map("late_night_minutes")
+  status                          AttendanceStatus @default(draft)
+  notes                           String?
+  createdAt                       DateTime         @default(now()) @map("created_at")
+  updatedAt                       DateTime         @updatedAt @map("updated_at")
+
+  employee                    Employee                      @relation(fields: [employeeId], references: [id])
+  attendanceAdjustmentRequests AttendanceAdjustmentRequest[]
+
+  @@unique([employeeId, workDate])
+  @@map("attendance_records")
+}
+
+enum AttendanceStatus {
+  draft
+  confirmed
+  adjusted
+}
+
+// =============================================
+// 11-10. attendance_adjustment_requests - 勤怠修正申請
+// =============================================
+model AttendanceAdjustmentRequest {
+  id                    String        @id @default(uuid())
+  employeeId            String        @map("employee_id")
+  attendanceRecordId    String        @map("attendance_record_id")
+  requestedClockInAt    DateTime?     @map("requested_clock_in_at")
+  requestedClockOutAt   DateTime?     @map("requested_clock_out_at")
+  requestedBreakMinutes Int?          @map("requested_break_minutes")
+  reason                String
+  status                RequestStatus @default(pending)
+  approvedBy            String?       @map("approved_by")
+  approvedAt            DateTime?     @map("approved_at")
+  rejectedReason        String?       @map("rejected_reason")
+  createdAt             DateTime      @default(now()) @map("created_at")
+  updatedAt             DateTime      @updatedAt @map("updated_at")
+
+  employee         Employee         @relation(fields: [employeeId], references: [id])
+  attendanceRecord AttendanceRecord @relation(fields: [attendanceRecordId], references: [id])
+
+  @@map("attendance_adjustment_requests")
+}
+
+enum RequestStatus {
+  pending
+  approved
+  rejected
+}
+
+// =============================================
+// 11-11. paid_leave_requests - 有給申請
+// =============================================
 model PaidLeaveRequest {
-  id            String    @id @default(uuid())
-  employeeId    String    @map("employee_id")
-  leaveDate     DateTime  @map("leave_date")
-  reason        String?
-  status        String    @default("PENDING")
-  reviewedById  String?   @map("reviewed_by")
-  reviewedAt    DateTime? @map("reviewed_at")
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
+  id             String        @id @default(uuid())
+  employeeId     String        @map("employee_id")
+  leaveDate      DateTime      @map("leave_date")
+  leaveUnit      LeaveUnit     @default(full_day) @map("leave_unit")
+  reason         String?
+  status         RequestStatus @default(pending)
+  approvedBy     String?       @map("approved_by")
+  approvedAt     DateTime?     @map("approved_at")
+  rejectedReason String?       @map("rejected_reason")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
 
-  // リレーション
-  employee      Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  reviewedBy    Employee? @relation("PaidLeaveRequestReviewer", fields: [reviewedById], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id])
 
   @@map("paid_leave_requests")
 }
 
-// 営業カレンダーテーブル
-model BusinessCalendar {
-  id        String   @id @default(uuid())
-  date      DateTime @unique
-  isHoliday Boolean  @default(false) @map("is_holiday")
-  note      String?
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  @@map("business_calendars")
+enum LeaveUnit {
+  full_day
+  half_day
+  hourly
 }
 
-// 給与確定テーブル
+// =============================================
+// 11-12. payroll_runs - 月次給与計算ヘッダ
+// =============================================
 model PayrollRun {
-  id           String    @id @default(uuid())
-  yearMonth    String    @unique @map("year_month")
-  status       String    @default("DRAFT")
-  confirmedById String?  @map("confirmed_by")
-  confirmedAt  DateTime? @map("confirmed_at")
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
+  id            String        @id @default(uuid())
+  companyId     String        @map("company_id")
+  year          Int
+  month         Int
+  status        PayrollStatus @default(draft)
+  closingDate   DateTime?     @map("closing_date")
+  paymentDate   DateTime?     @map("payment_date")
+  calculatedAt  DateTime?     @map("calculated_at")
+  finalizedAt   DateTime?     @map("finalized_at")
+  finalizedBy   String?       @map("finalized_by")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
 
-  // リレーション
-  confirmedBy  Employee?     @relation("PayrollRunConfirmer", fields: [confirmedById], references: [id])
+  company      Company       @relation(fields: [companyId], references: [id])
   payrollItems PayrollItem[]
 
+  @@unique([companyId, year, month])
   @@map("payroll_runs")
 }
 
-// 給与明細テーブル
-model PayrollItem {
-  id                  String   @id @default(uuid())
-  payrollRunId        String   @map("payroll_run_id")
-  employeeId          String   @map("employee_id")
-  baseSalary          Decimal  @map("base_salary")
-  overtimePay         Decimal  @default(0) @map("overtime_pay")
-  holidayPay          Decimal  @default(0) @map("holiday_pay")
-  deemedOvertimePay   Decimal  @default(0) @map("deemed_overtime_pay")
-  grossSalary         Decimal  @map("gross_salary")
-  socialInsurance     Decimal  @default(0) @map("social_insurance")
-  employmentInsurance Decimal  @default(0) @map("employment_insurance")
-  incomeTax           Decimal  @default(0) @map("income_tax")
-  totalDeductions     Decimal  @default(0) @map("total_deductions")
-  netSalary           Decimal  @map("net_salary")
-  workHours           Decimal  @default(0) @map("work_hours")
-  overtimeHours       Decimal  @default(0) @map("overtime_hours")
-  holidayHours        Decimal  @default(0) @map("holiday_hours")
-  pdfPath             String?  @map("pdf_path")
-  createdAt           DateTime @default(now()) @map("created_at")
-  updatedAt           DateTime @updatedAt @map("updated_at")
+enum PayrollStatus {
+  draft
+  calculated
+  finalized
+  reverted
+}
 
-  // リレーション
-  payrollRun          PayrollRun @relation(fields: [payrollRunId], references: [id], onDelete: Cascade)
-  employee            Employee   @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  emailLogs           EmailLog[]
+// =============================================
+// 11-13. payroll_items - 従業員別月次給与結果
+// =============================================
+model PayrollItem {
+  id                         String  @id @default(uuid())
+  payrollRunId               String  @map("payroll_run_id")
+  employeeId                 String  @map("employee_id")
+  departmentSnapshotJson     String? @map("department_snapshot_json")
+  salarySettingSnapshotJson  String? @map("salary_setting_snapshot_json")
+  baseHourlyWage             Int     @default(0) @map("base_hourly_wage")
+  baseSalary                 Int     @default(0) @map("base_salary")
+  allowanceTotal             Int     @default(0) @map("allowance_total")
+  fixedOvertimeAllowance     Int     @default(0) @map("fixed_overtime_allowance")
+  withinScheduledOvertimePay Int     @default(0) @map("within_scheduled_overtime_pay")
+  overtimePay                Int     @default(0) @map("overtime_pay")
+  scheduledHolidayPay        Int     @default(0) @map("scheduled_holiday_pay")
+  legalHolidayPay            Int     @default(0) @map("legal_holiday_pay")
+  lateNightPay               Int     @default(0) @map("late_night_pay")
+  incentivePay               Int     @default(0) @map("incentive_pay")
+  commutingPay               Int     @default(0) @map("commuting_pay")
+  grossPay                   Int     @default(0) @map("gross_pay")
+  lateDeduction              Int     @default(0) @map("late_deduction")
+  earlyLeaveDeduction        Int     @default(0) @map("early_leave_deduction")
+  absenceDeduction           Int     @default(0) @map("absence_deduction")
+  healthInsurance            Int     @default(0) @map("health_insurance")
+  nursingCareInsurance       Int     @default(0) @map("nursing_care_insurance")
+  welfarePension             Int     @default(0) @map("welfare_pension")
+  employmentInsurance        Int     @default(0) @map("employment_insurance")
+  incomeTax                  Int     @default(0) @map("income_tax")
+  residentTax                Int     @default(0) @map("resident_tax")
+  otherDeductions            Int     @default(0) @map("other_deductions")
+  totalDeductions            Int     @default(0) @map("total_deductions")
+  netPay                     Int     @default(0) @map("net_pay")
+  fixedOvertimeMinutes       Int     @default(0) @map("fixed_overtime_minutes")
+  fixedOvertimeExcessMinutes Int     @default(0) @map("fixed_overtime_excess_minutes")
+  fixedOvertimeExcessPay     Int     @default(0) @map("fixed_overtime_excess_pay")
+  // 勤怠サマリ
+  totalWorkDays              Int     @default(0) @map("total_work_days")
+  totalWorkedMinutes         Int     @default(0) @map("total_worked_minutes")
+  totalOvertimeMinutes       Int     @default(0) @map("total_overtime_minutes")
+  totalLateNightMinutes      Int     @default(0) @map("total_late_night_minutes")
+  totalHolidayMinutes        Int     @default(0) @map("total_holiday_minutes")
+  totalLateMinutes           Int     @default(0) @map("total_late_minutes")
+  totalEarlyLeaveMinutes     Int     @default(0) @map("total_early_leave_minutes")
+  totalAbsenceMinutes        Int     @default(0) @map("total_absence_minutes")
+  pdfFilePath                String? @map("pdf_file_path")
+  mailedAt                   DateTime? @map("mailed_at")
+  mailStatus                 MailStatus? @map("mail_status")
+  createdAt                  DateTime @default(now()) @map("created_at")
+  updatedAt                  DateTime @updatedAt @map("updated_at")
+
+  payrollRun    PayrollRun      @relation(fields: [payrollRunId], references: [id], onDelete: Cascade)
+  employee      Employee        @relation(fields: [employeeId], references: [id])
+  payslipMailLogs PayslipMailLog[]
 
   @@unique([payrollRunId, employeeId])
   @@map("payroll_items")
 }
 
-// メール送信履歴テーブル
-model EmailLog {
+enum MailStatus {
+  pending
+  sent
+  failed
+}
+
+// =============================================
+// 11-14. statutory_rate_masters - 年度別法定控除率
+// =============================================
+model StatutoryRateMaster {
+  id                               String   @id @default(uuid())
+  fiscalYear                       Int      @map("fiscal_year")
+  healthInsuranceRate              Decimal  @map("health_insurance_rate") // e.g. 0.0998
+  nursingCareInsuranceRate         Decimal  @map("nursing_care_insurance_rate")
+  welfarePensionRate               Decimal  @map("welfare_pension_rate")
+  childSupportRate                 Decimal  @map("child_support_rate")
+  employmentInsuranceEmployeeRate  Decimal  @map("employment_insurance_employee_rate")
+  employmentInsuranceEmployerRate  Decimal  @map("employment_insurance_employer_rate")
+  effectiveFrom                    DateTime @map("effective_from")
+  effectiveTo                      DateTime? @map("effective_to")
+  createdAt                        DateTime @default(now()) @map("created_at")
+  updatedAt                        DateTime @updatedAt @map("updated_at")
+
+  @@unique([fiscalYear])
+  @@map("statutory_rate_masters")
+}
+
+// =============================================
+// 11-15. standard_monthly_remuneration_tables - 標準報酬月額
+// =============================================
+model StandardMonthlyRemunerationTable {
+  id                         String   @id @default(uuid())
+  fiscalYear                 Int      @map("fiscal_year")
+  grade                      Int
+  remunerationMin            Int?     @map("remuneration_min")
+  remunerationMax            Int?     @map("remuneration_max")
+  standardMonthlyRemuneration Int     @map("standard_monthly_remuneration")
+  healthInsuranceFull        Int?     @map("health_insurance_full")
+  healthInsuranceHalf        Int?     @map("health_insurance_half")
+  careInsuranceFull          Int?     @map("care_insurance_full")
+  careInsuranceHalf          Int?     @map("care_insurance_half")
+  pensionFull                Int?     @map("pension_full")
+  pensionHalf                Int?     @map("pension_half")
+  childSupportFull           Int?     @map("child_support_full")
+  childSupportHalf           Int?     @map("child_support_half")
+  createdAt                  DateTime @default(now()) @map("created_at")
+  updatedAt                  DateTime @updatedAt @map("updated_at")
+
+  @@unique([fiscalYear, grade])
+  @@map("standard_monthly_remuneration_tables")
+}
+
+// =============================================
+// 11-16. income_tax_tables - 所得税源泉テーブル
+// =============================================
+model IncomeTaxTable {
+  id              String   @id @default(uuid())
+  fiscalYear      Int      @map("fiscal_year")
+  salaryFrom      Int      @map("salary_from")
+  salaryTo        Int      @map("salary_to")
+  dependentsCount Int      @map("dependents_count")
+  taxAmount       Int      @map("tax_amount")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("income_tax_tables")
+}
+
+// =============================================
+// 11-17. payslip_mail_logs - 給与明細送信ログ
+// =============================================
+model PayslipMailLog {
   id            String    @id @default(uuid())
   payrollItemId String    @map("payroll_item_id")
-  employeeId    String    @map("employee_id")
-  sentAt        DateTime? @map("sent_at")
-  status        String    @default("PENDING")
+  toEmail       String    @map("to_email")
+  subject       String
+  body          String
+  status        MailStatus @default(pending)
   errorMessage  String?   @map("error_message")
-  retryCount    Int       @default(0) @map("retry_count")
+  sentAt        DateTime? @map("sent_at")
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
 
-  // リレーション
-  payrollItem   PayrollItem @relation(fields: [payrollItemId], references: [id], onDelete: Cascade)
-  employee      Employee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  payrollItem PayrollItem @relation(fields: [payrollItemId], references: [id], onDelete: Cascade)
 
-  @@map("email_logs")
+  @@map("payslip_mail_logs")
 }
 
-// 監査ログテーブル
+// =============================================
+// 11-18. audit_logs - 監査ログ
+// =============================================
 model AuditLog {
-  id         String   @id @default(uuid())
-  userId     String   @map("user_id")
-  action     String
-  targetType String   @map("target_type")
-  targetId   String   @map("target_id")
-  oldValue   String?  @map("old_value")
-  newValue   String?  @map("new_value")
-  ipAddress  String?  @map("ip_address")
-  createdAt  DateTime @default(now()) @map("created_at")
+  id           String    @id @default(uuid())
+  actorType    ActorType @map("actor_type")
+  actorId      String    @map("actor_id")
+  action       String
+  targetType   String    @map("target_type")
+  targetId     String    @map("target_id")
+  beforeJson   String?   @map("before_json")
+  afterJson    String?   @map("after_json")
+  metadataJson String?   @map("metadata_json")
+  createdAt    DateTime  @default(now()) @map("created_at")
 
-  // リレーション
-  user       Employee @relation("AuditLogUser", fields: [userId], references: [id], onDelete: Cascade)
+  actor User @relation(fields: [actorId], references: [id])
 
   @@map("audit_logs")
 }
 
-// シフト希望（月単位）テーブル
-model ShiftRequest {
-  id            String       @id @default(uuid())
-  employeeId    String       @map("employee_id")
-  yearMonth     String       @map("year_month") // YYYY-MM
-  status        String       @default("PENDING") // PENDING, APPROVED, REJECTED
-  submittedAt   DateTime     @default(now()) @map("submitted_at")
-  reviewedById  String?      @map("reviewed_by")
-  reviewedAt    DateTime?    @map("reviewed_at")
-  createdAt     DateTime     @default(now()) @map("created_at")
-  updatedAt     DateTime     @updatedAt @map("updated_at")
-
-  // リレーション
-  employee      Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  shiftEntries  ShiftEntry[] // この希望申請に含まれる日毎のシフト詳細
-  
-  // レビュアー向けリレーションは今回はシンプルにするためIDのみ保持か、あるいは明示的にリレーションを張るか
-  // reviewedBy    Employee?    @relation("ShiftRequestReviewer", fields: [reviewedById], references: [id])
-
-  @@unique([employeeId, yearMonth]) // 同月一回の申請とする
-  @@map("shift_requests")
-}
-
-// 日別シフトテーブル（希望および確定）
-model ShiftEntry {
-  id             String        @id @default(uuid())
-  shiftRequestId String?       @map("shift_request_id") // 申請に紐づく場合
-  employeeId     String        @map("employee_id")
-  date           DateTime      // 対象日
-  startTime      DateTime?     @map("start_time") // シフト開始予定時間 (nullの場合は休み希望など)
-  endTime        DateTime?     @map("end_time")   // シフト終了予定時間
-  isRest         Boolean       @default(false) @map("is_rest") // 休み希望/休み確定フラグ
-  isConfirmed    Boolean       @default(false) @map("is_confirmed") // 管理者が確定させたか
-  note           String?       // 備考（希望理由や管理者からのコメント）
-  createdAt      DateTime      @default(now()) @map("created_at")
-  updatedAt      DateTime      @updatedAt @map("updated_at")
-
-  // リレーション
-  employee       Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  shiftRequest   ShiftRequest? @relation(fields: [shiftRequestId], references: [id], onDelete: SetNull)
-
-  @@unique([employeeId, date])
-  @@map("shift_entries")
+enum ActorType {
+  admin
+  employee
+  system
 }

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth, hashPassword, hashPin, verifyPassword } from '@/lib/auth'
-import { logAction, getIpAddress } from '@/lib/audit'
+import { logAction } from '@/lib/audit'
 import { z } from 'zod'
 
 const updateProfileSchema = z.object({
@@ -10,60 +10,166 @@ const updateProfileSchema = z.object({
     currentPassword: z.string().min(1),
 })
 
-export async function PATCH(request: NextRequest) {
+export async function GET() {
     try {
         const user = await requireAuth()
-        const body = await request.json()
-        const { password, pin, currentPassword } = updateProfileSchema.parse(body)
 
-        // 現在のパスワード確認
+        if (!user.employeeId) {
+            return NextResponse.json(
+                { success: false, error: { code: 'NO_EMPLOYEE', message: '従業員情報が見つかりません' } },
+                { status: 403 }
+            )
+        }
+
         const employee = await prisma.employee.findUnique({
-            where: { id: user.id },
+            where: { id: user.employeeId },
+            include: {
+                department: {
+                    select: {
+                        id: true,
+                        name: true,
+                        code: true,
+                        startTime: true,
+                        endTime: true,
+                        breakMinutes: true,
+                    },
+                },
+            },
         })
 
         if (!employee) {
-            return NextResponse.json({ error: 'ユーザーが見つかりません' }, { status: 404 })
+            return NextResponse.json(
+                { success: false, error: { code: 'NOT_FOUND', message: '従業員情報が見つかりません' } },
+                { status: 404 }
+            )
         }
 
-        const isPasswordValid = await verifyPassword(currentPassword, employee.passwordHash)
+        return NextResponse.json({
+            success: true,
+            data: {
+                employee: {
+                    id: employee.id,
+                    employeeCode: employee.employeeCode,
+                    name: employee.name,
+                    email: employee.email,
+                    employmentType: employee.employmentType,
+                    payType: employee.payType,
+                    active: employee.active,
+                    joinDate: employee.joinDate?.toISOString() ?? null,
+                    department: employee.department,
+                },
+            },
+        })
+    } catch (error) {
+        console.error('Get profile error:', error)
+        if (error instanceof Error && error.message.includes('認証')) {
+            return NextResponse.json(
+                { success: false, error: { code: 'UNAUTHORIZED', message: error.message } },
+                { status: 401 }
+            )
+        }
+        return NextResponse.json(
+            { success: false, error: { code: 'INTERNAL_ERROR', message: 'プロフィールの取得中にエラーが発生しました' } },
+            { status: 500 }
+        )
+    }
+}
+
+export async function PATCH(request: NextRequest) {
+    try {
+        const user = await requireAuth()
+
+        if (!user.employeeId) {
+            return NextResponse.json(
+                { success: false, error: { code: 'NO_EMPLOYEE', message: '従業員情報が見つかりません' } },
+                { status: 403 }
+            )
+        }
+
+        const body = await request.json()
+        const parsed = updateProfileSchema.safeParse(body)
+
+        if (!parsed.success) {
+            return NextResponse.json(
+                { success: false, error: { code: 'VALIDATION_ERROR', message: '入力データが不正です', details: parsed.error.errors } },
+                { status: 400 }
+            )
+        }
+
+        const { password, pin, currentPassword } = parsed.data
+
+        // Verify current password via User record
+        const userRecord = await prisma.user.findUnique({
+            where: { id: user.id },
+        })
+
+        if (!userRecord) {
+            return NextResponse.json(
+                { success: false, error: { code: 'NOT_FOUND', message: 'ユーザーが見つかりません' } },
+                { status: 404 }
+            )
+        }
+
+        const isPasswordValid = await verifyPassword(currentPassword, userRecord.passwordHash)
         if (!isPasswordValid) {
-            return NextResponse.json({ error: '現在のパスワードが正しくありません' }, { status: 401 })
+            return NextResponse.json(
+                { success: false, error: { code: 'INVALID_PASSWORD', message: '現在のパスワードが正しくありません' } },
+                { status: 401 }
+            )
         }
 
-        const updateData: any = {}
-        const auditChanges: any = { oldValue: {}, newValue: {} }
+        const userUpdateData: Record<string, unknown> = {}
+        const employeeUpdateData: Record<string, unknown> = {}
+        const auditAfter: Record<string, unknown> = {}
 
         if (password) {
-            updateData.passwordHash = await hashPassword(password)
-            auditChanges.newValue.passwordChanged = true
+            userUpdateData.passwordHash = await hashPassword(password)
+            auditAfter.passwordChanged = true
         }
 
         if (pin) {
-            updateData.pinHash = await hashPin(pin)
-            auditChanges.newValue.pinChanged = true
+            employeeUpdateData.pinHash = await hashPin(pin)
+            auditAfter.pinChanged = true
         }
 
-        if (Object.keys(updateData).length === 0) {
-            return NextResponse.json({ error: '更新する項目がありません' }, { status: 400 })
+        if (Object.keys(userUpdateData).length === 0 && Object.keys(employeeUpdateData).length === 0) {
+            return NextResponse.json(
+                { success: false, error: { code: 'NO_CHANGES', message: '更新する項目がありません' } },
+                { status: 400 }
+            )
         }
 
-        await prisma.employee.update({
-            where: { id: user.id },
-            data: updateData,
+        await Promise.all([
+            Object.keys(userUpdateData).length > 0
+                ? prisma.user.update({ where: { id: user.id }, data: userUpdateData })
+                : Promise.resolve(),
+            Object.keys(employeeUpdateData).length > 0
+                ? prisma.employee.update({ where: { id: user.employeeId }, data: employeeUpdateData })
+                : Promise.resolve(),
+        ])
+
+        await logAction(user, 'UPDATE', 'EmployeeProfile', user.employeeId, {
+            afterJson: auditAfter,
         })
 
-        // 監査ログ
-        await logAction(user, 'UPDATE', 'EmployeeProfile', user.id, {
-            ...auditChanges,
-            ipAddress: getIpAddress(request),
-        })
-
-        return NextResponse.json({ success: true, message: 'プロフィールを更新しました' })
+        return NextResponse.json({ success: true, data: { message: 'プロフィールを更新しました' } })
     } catch (error) {
         console.error('Update profile error:', error)
-        if (error instanceof z.ZodError) {
-            return NextResponse.json({ error: '入力データが不正です', details: error.errors }, { status: 400 })
+        if (error instanceof Error && error.message.includes('認証')) {
+            return NextResponse.json(
+                { success: false, error: { code: 'UNAUTHORIZED', message: error.message } },
+                { status: 401 }
+            )
         }
-        return NextResponse.json({ error: 'プロフィールの更新中にエラーが発生しました' }, { status: 500 })
+        if (error instanceof z.ZodError) {
+            return NextResponse.json(
+                { success: false, error: { code: 'VALIDATION_ERROR', message: '入力データが不正です', details: error.errors } },
+                { status: 400 }
+            )
+        }
+        return NextResponse.json(
+            { success: false, error: { code: 'INTERNAL_ERROR', message: 'プロフィールの更新中にエラーが発生しました' } },
+            { status: 500 }
+        )
     }
 }

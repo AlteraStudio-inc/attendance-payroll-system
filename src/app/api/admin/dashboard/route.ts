@@ -3,36 +3,71 @@ export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAdmin } from '@/lib/auth'
+import { startOfDay, endOfDay } from 'date-fns'
 
 export async function GET() {
     try {
-        await requireAdmin()
+        const user = await requireAdmin()
 
-        const today = new Date()
-        today.setHours(0, 0, 0, 0)
+        const now = new Date()
+        const todayStart = startOfDay(now)
+        const todayEnd = endOfDay(now)
+
+        const companyFilter = user.companyId ? { companyId: user.companyId } : {}
 
         const [
             totalEmployees,
             activeEmployees,
-            todayClockIns,
-            pendingWorkRequests,
+            todayAttendanceCount,
+            pendingAdjustmentRequests,
             pendingLeaveRequests,
             draftPayrolls,
             recentEntries,
         ] = await Promise.all([
-            prisma.employee.count(),
-            prisma.employee.count({ where: { isActive: true } }),
-            prisma.timeEntry.count({ where: { date: today } }),
-            prisma.workTimeRequest.count({ where: { status: 'PENDING' } }),
-            prisma.paidLeaveRequest.count({ where: { status: 'PENDING' } }),
-            prisma.payrollRun.count({ where: { status: 'DRAFT' } }),
-            prisma.timeEntry.findMany({
-                where: { date: today },
+            prisma.employee.count({ where: { ...companyFilter } }),
+            prisma.employee.count({ where: { ...companyFilter, active: true } }),
+            prisma.attendanceRecord.count({
+                where: {
+                    workDate: { gte: todayStart, lte: todayEnd },
+                    ...(user.companyId
+                        ? { employee: { companyId: user.companyId } }
+                        : {}),
+                },
+            }),
+            prisma.attendanceAdjustmentRequest.count({
+                where: {
+                    status: 'pending',
+                    ...(user.companyId
+                        ? { employee: { companyId: user.companyId } }
+                        : {}),
+                },
+            }),
+            prisma.paidLeaveRequest.count({
+                where: {
+                    status: 'pending',
+                    ...(user.companyId
+                        ? { employee: { companyId: user.companyId } }
+                        : {}),
+                },
+            }),
+            prisma.payrollRun.count({
+                where: {
+                    ...companyFilter,
+                    status: { in: ['draft', 'calculated'] },
+                },
+            }),
+            prisma.attendanceRecord.findMany({
+                where: {
+                    workDate: { gte: todayStart, lte: todayEnd },
+                    ...(user.companyId
+                        ? { employee: { companyId: user.companyId } }
+                        : {}),
+                },
                 take: 10,
-                orderBy: { clockIn: 'desc' },
+                orderBy: { clockInAt: 'desc' },
                 include: {
                     employee: {
-                        select: { name: true },
+                        select: { name: true, employeeCode: true },
                     },
                 },
             }),
@@ -41,33 +76,41 @@ export async function GET() {
         const recentClockIns = recentEntries.map((entry) => ({
             id: entry.id,
             employeeName: entry.employee.name,
-            clockIn: entry.clockIn.toLocaleTimeString('ja-JP', {
-                hour: '2-digit',
-                minute: '2-digit',
-            }),
-            clockOut: entry.clockOut?.toLocaleTimeString('ja-JP', {
-                hour: '2-digit',
-                minute: '2-digit',
-            }) ?? null,
+            employeeCode: entry.employee.employeeCode,
+            clockInAt: entry.clockInAt
+                ? entry.clockInAt.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })
+                : null,
+            clockOutAt: entry.clockOutAt
+                ? entry.clockOutAt.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })
+                : null,
+            status: entry.status,
         }))
 
         return NextResponse.json({
-            stats: {
-                totalEmployees,
-                activeEmployees,
-                todayClockIns,
-                pendingRequests: pendingWorkRequests + pendingLeaveRequests,
-                unconfirmedPayrolls: draftPayrolls,
+            success: true,
+            data: {
+                stats: {
+                    totalEmployees,
+                    activeEmployees,
+                    todayClockIns: todayAttendanceCount,
+                    pendingRequests: pendingAdjustmentRequests + pendingLeaveRequests,
+                    pendingAdjustmentRequests,
+                    pendingLeaveRequests,
+                    unconfirmedPayrolls: draftPayrolls,
+                },
+                recentClockIns,
             },
-            recentClockIns,
         })
     } catch (error) {
         console.error('Dashboard error:', error)
-        if (error instanceof Error && error.message === '管理者権限が必要です') {
-            return NextResponse.json({ error: error.message }, { status: 403 })
+        if (error instanceof Error && (error.message.includes('権限') || error.message.includes('認証'))) {
+            return NextResponse.json(
+                { success: false, error: { code: 'FORBIDDEN', message: error.message } },
+                { status: 403 }
+            )
         }
         return NextResponse.json(
-            { error: 'ダッシュボードの取得中にエラーが発生しました' },
+            { success: false, error: { code: 'INTERNAL_ERROR', message: 'ダッシュボードの取得中にエラーが発生しました' } },
             { status: 500 }
         )
     }

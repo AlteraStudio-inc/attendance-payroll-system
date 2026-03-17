@@ -25,29 +25,69 @@ import { ja } from 'date-fns/locale'
 const COMPANY_NAME = process.env.COMPANY_NAME || '株式会社サンプル'
 const STORAGE_PATH = process.env.PAYSLIP_STORAGE_PATH || './data/payslips'
 
+// PayrollItem モデルに対応した給与明細データ
 export interface PayslipData {
   employeeCode: string
   employeeName: string
   jobType?: string // 職種 (CONSTRUCTION, NAIL, EYELASH, SUPPORT)
   yearMonth: string
-  workHours: number
-  overtimeHours: number
-  holidayHours: number
+
+  // 支給項目
   baseSalary: number
+  allowanceTotal: number
+  fixedOvertimeAllowance: number
+  withinScheduledOvertimePay: number
   overtimePay: number
-  holidayPay: number
-  deemedOvertimePay: number
-  grossSalary: number
-  socialInsurance: number
+  scheduledHolidayPay: number
+  legalHolidayPay: number
+  lateNightPay: number
+  incentivePay: number
+  commutingPay: number
+  grossPay: number
+
+  // 控除項目
+  lateDeduction: number
+  earlyLeaveDeduction: number
+  absenceDeduction: number
+  healthInsurance: number
+  nursingCareInsurance: number
+  welfarePension: number
   employmentInsurance: number
   incomeTax: number
+  residentTax: number
+  otherDeductions: number
   totalDeductions: number
-  netSalary: number
+  netPay: number
+
+  // みなし残業関連
+  fixedOvertimeMinutes: number
+  fixedOvertimeExcessMinutes: number
+  fixedOvertimeExcessPay: number
+
+  // 勤怠集計
+  totalWorkDays: number
+  totalWorkedMinutes: number
+  totalOvertimeMinutes: number
+  totalLateNightMinutes: number
+  totalHolidayMinutes: number
+
+  // 時給基礎
+  baseHourlyWage: number
 }
 
-// 給与明細HTMLテンプレート
+// 分を「X時間Y分」形式に変換
+function formatMinutes(minutes: number): string {
+  if (minutes === 0) return '0'
+  const h = Math.floor(minutes / 60)
+  const m = minutes % 60
+  if (h === 0) return `${m}分`
+  if (m === 0) return `${h}時間`
+  return `${h}時間${m}分`
+}
+
+// 給与明細HTMLテンプレート（A4縦）
 function generatePayslipHtml(data: PayslipData): string {
-  const formatCurrency = (amount: number) => amount === 0 ? '0' : amount.toLocaleString()
+  const fmt = (amount: number) => amount === 0 ? '0' : amount.toLocaleString()
   const [year, month] = data.yearMonth.split('-')
 
   // 職種に応じた表示用部署名
@@ -57,7 +97,8 @@ function generatePayslipHtml(data: PayslipData): string {
   else if (data.jobType === 'EYELASH') jobTitle = 'アイラッシュ部門'
   else if (data.jobType === 'SUPPORT') jobTitle = '就労支援部門'
 
-  const workDays = Math.ceil(data.workHours / 8) || 20
+  const socialInsuranceTotal =
+    data.healthInsurance + data.nursingCareInsurance + data.welfarePension + data.employmentInsurance
 
   return `
 <!DOCTYPE html>
@@ -73,31 +114,31 @@ function generatePayslipHtml(data: PayslipData): string {
     }
     body {
       font-family: 'Noto Sans JP', sans-serif;
-      font-size: 11px;
+      font-size: 10px;
       line-height: 1.2;
-      padding: 15mm;
+      padding: 12mm 15mm;
       background: white;
       color: #000;
     }
     .company {
       text-align: right;
-      margin-bottom: 20px;
-      font-size: 12px;
+      margin-bottom: 12px;
+      font-size: 11px;
     }
     .title-box {
       border: 2px solid #000;
       text-align: center;
-      padding: 10px;
-      font-size: 20px;
+      padding: 8px;
+      font-size: 18px;
       font-weight: bold;
       width: 80%;
-      margin: 0 auto 30px auto;
+      margin: 0 auto 18px auto;
       background-color: #f0f7ff;
     }
     .info-container {
       display: flex;
       justify-content: space-between;
-      margin-bottom: 20px;
+      margin-bottom: 14px;
     }
     .info-table {
       border-collapse: collapse;
@@ -105,40 +146,78 @@ function generatePayslipHtml(data: PayslipData): string {
     }
     .info-table th, .info-table td {
       border: 1px solid #000;
-      padding: 5px 10px;
+      padding: 4px 8px;
       text-align: center;
-      height: 24px;
+      height: 22px;
     }
     .info-table th {
       background-color: #f0f7ff;
       font-weight: normal;
     }
+    .section-title {
+      font-size: 11px;
+      font-weight: bold;
+      margin: 10px 0 4px 0;
+      padding: 3px 8px;
+      background-color: #e8f0fe;
+      border-left: 4px solid #4472c4;
+    }
     .main-table {
       width: 100%;
       border-collapse: collapse;
       border: 2px solid #000;
-      margin-bottom: 12px;
+      margin-bottom: 8px;
     }
     .main-table th, .main-table td {
       border: 1px solid #000;
-      padding: 4px;
+      padding: 3px 4px;
       text-align: right;
-      height: 26px;
+      height: 22px;
     }
     .main-table th {
       background-color: #f0f7ff;
       font-weight: normal;
       text-align: center;
+      font-size: 9px;
+    }
+    .main-table td {
+      font-size: 10px;
     }
     .side-th {
       writing-mode: vertical-rl;
       text-orientation: upright;
-      letter-spacing: 5px;
-      width: 5%;
+      letter-spacing: 4px;
+      width: 4%;
       text-align: center !important;
-      padding: 10px 0 !important;
+      padding: 8px 0 !important;
+      background-color: #dce6f0 !important;
+      font-weight: bold !important;
     }
-    .col-header { width: 19%; }
+    .col-4 { width: 19%; }
+    .col-5 { width: 19.2%; }
+    .total-cell {
+      background-color: #fff2cc;
+      font-weight: bold;
+    }
+    .net-pay-row td {
+      font-size: 13px;
+      font-weight: bold;
+      background-color: #d9ead3;
+    }
+    .remarks-table {
+      width: 100%;
+      border-collapse: collapse;
+      border: 2px solid #000;
+    }
+    .remarks-table th, .remarks-table td {
+      border: 1px solid #000;
+      padding: 4px 6px;
+    }
+    .remarks-table th {
+      background-color: #f0f7ff;
+      width: 20%;
+      text-align: center;
+    }
   </style>
 </head>
 <body>
@@ -146,205 +225,178 @@ function generatePayslipHtml(data: PayslipData): string {
   <div class="title-box">給与明細書（${year}年${Number(month)}月分）</div>
 
   <div class="info-container">
-    <table class="info-table" style="width: 45%;">
+    <table class="info-table" style="width: 48%;">
       <tr>
         <th style="width: 30%">部　署</th>
         <td style="text-align: left;">${jobTitle}</td>
       </tr>
       <tr>
+        <th>社員番号</th>
+        <td style="text-align: left;">${data.employeeCode}</td>
+      </tr>
+      <tr>
         <th>氏　名</th>
-        <td style="text-align: left;">${data.employeeName}　　様</td>
+        <td style="text-align: left;">${data.employeeName}　様</td>
       </tr>
     </table>
-    
-    <table class="info-table" style="width: 40%;">
+
+    <table class="info-table" style="width: 38%;">
       <tr>
-        <th style="width: 40%">給与支給日</th>
+        <th style="width: 42%">給与支給日</th>
         <td>${year}年${Number(month)}月25日</td>
       </tr>
       <tr>
-        <th>給与締日</th>
-        <td>${year}年${Number(month)}月××日</td>
+        <th>時給基礎単価</th>
+        <td>${fmt(data.baseHourlyWage)} 円</td>
+      </tr>
+      <tr>
+        <th>固定残業時間</th>
+        <td>${formatMinutes(data.fixedOvertimeMinutes)}</td>
       </tr>
     </table>
   </div>
 
+  <!-- 勤怠項目 -->
+  <div class="section-title">勤怠項目</div>
   <table class="main-table">
     <tr>
-      <th rowspan="4" class="side-th">勤怠項目</th>
-      <th class="col-header">出勤日数</th>
-      <th class="col-header">休日出勤日数</th>
-      <th class="col-header">有給日数</th>
-      <th class="col-header">欠勤日数</th>
-      <th class="col-header">遅刻・早退回数</th>
+      <th rowspan="2" class="side-th">勤怠</th>
+      <th class="col-5">出勤日数</th>
+      <th class="col-5">労働時間</th>
+      <th class="col-5">時間外労働</th>
+      <th class="col-5">深夜労働</th>
+      <th class="col-5">休日労働</th>
     </tr>
     <tr>
-      <td>${workDays}</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-    </tr>
-    <tr>
-      <th>所定労働時間</th>
-      <th>時間外労働時間</th>
-      <th>休日労働時間</th>
-      <th>深夜時間</th>
-      <th>遅刻・早退時間</th>
-    </tr>
-    <tr>
-      <td>${data.workHours.toFixed(1)}</td>
-      <td>${data.overtimeHours.toFixed(1)}</td>
-      <td>${data.holidayHours.toFixed(1)}</td>
-      <td>0.0</td>
-      <td>0.0</td>
+      <td>${data.totalWorkDays} 日</td>
+      <td>${formatMinutes(data.totalWorkedMinutes)}</td>
+      <td>${formatMinutes(data.totalOvertimeMinutes)}</td>
+      <td>${formatMinutes(data.totalLateNightMinutes)}</td>
+      <td>${formatMinutes(data.totalHolidayMinutes)}</td>
     </tr>
   </table>
 
+  <!-- 支給項目 -->
+  <div class="section-title">支給項目</div>
   <table class="main-table">
     <tr>
-      <th rowspan="8" class="side-th">支給項目</th>
-      <th class="col-header">基本給</th>
-      <th class="col-header">役職手当</th>
-      <th class="col-header">資格手当</th>
-      <th class="col-header"></th>
-      <th class="col-header"></th>
+      <th rowspan="10" class="side-th">支給</th>
+      <th class="col-4">基本給</th>
+      <th class="col-4">諸手当合計</th>
+      <th class="col-4">固定残業手当</th>
+      <th class="col-4">所定内残業手当</th>
+      <th class="col-4">時間外手当</th>
     </tr>
     <tr>
-      <td>${formatCurrency(data.baseSalary)}</td>
-      <td>0</td>
-      <td>0</td>
-      <td></td>
-      <td></td>
+      <td>${fmt(data.baseSalary)}</td>
+      <td>${fmt(data.allowanceTotal)}</td>
+      <td>${fmt(data.fixedOvertimeAllowance)}</td>
+      <td>${fmt(data.withinScheduledOvertimePay)}</td>
+      <td>${fmt(data.overtimePay)}</td>
     </tr>
     <tr>
-      <th>普通残業手当</th>
-      <th>休日手当</th>
+      <th>法定休日手当</th>
+      <th>所定休日手当</th>
       <th>深夜手当</th>
-      <th></th>
-      <th></th>
+      <th>インセンティブ</th>
+      <th>通勤手当</th>
     </tr>
     <tr>
-      <td>${formatCurrency(data.overtimePay)}</td>
-      <td>${formatCurrency(data.holidayPay)}</td>
-      <td>0</td>
-      <td></td>
-      <td></td>
+      <td>${fmt(data.legalHolidayPay)}</td>
+      <td>${fmt(data.scheduledHolidayPay)}</td>
+      <td>${fmt(data.lateNightPay)}</td>
+      <td>${fmt(data.incentivePay)}</td>
+      <td>${fmt(data.commutingPay)}</td>
     </tr>
     <tr>
-      <th>課税通勤手当</th>
-      <th></th>
-      <th></th>
-      <th></th>
-      <th></th>
-    </tr>
-    <tr>
-      <td>0</td>
-      <td></td>
-      <td></td>
-      <td></td>
-      <td></td>
-    </tr>
-    <tr>
-      <th>非課税通勤手当</th>
-      <th></th>
-      <th></th>
-      <th></th>
+      <th colspan="4"></th>
       <th>支給額合計</th>
     </tr>
     <tr>
-      <td>0</td>
-      <td></td>
-      <td></td>
-      <td></td>
-      <td>${formatCurrency(data.grossSalary)}</td>
+      <td colspan="4"></td>
+      <td class="total-cell">${fmt(data.grossPay)}</td>
     </tr>
   </table>
 
+  <!-- 控除項目 -->
+  <div class="section-title">控除項目</div>
   <table class="main-table">
     <tr>
-      <th rowspan="6" class="side-th">控除項目</th>
-      <th class="col-header">健康保険</th>
-      <th class="col-header">介護保険</th>
-      <th class="col-header">厚生年金</th>
-      <th class="col-header">雇用保険</th>
-      <th class="col-header"></th>
+      <th rowspan="8" class="side-th">控除</th>
+      <th class="col-4">遅刻控除</th>
+      <th class="col-4">早退控除</th>
+      <th class="col-4">欠勤控除</th>
+      <th class="col-4"></th>
+      <th class="col-4"></th>
     </tr>
     <tr>
-      <td>${formatCurrency(Math.floor(data.socialInsurance * 0.4))}</td>
-      <td>0</td>
-      <td>${formatCurrency(Math.floor(data.socialInsurance * 0.6))}</td>
-      <td>${formatCurrency(data.employmentInsurance)}</td>
+      <td>${fmt(data.lateDeduction)}</td>
+      <td>${fmt(data.earlyLeaveDeduction)}</td>
+      <td>${fmt(data.absenceDeduction)}</td>
+      <td></td>
+      <td></td>
+    </tr>
+    <tr>
+      <th>健康保険</th>
+      <th>介護保険</th>
+      <th>厚生年金</th>
+      <th>雇用保険</th>
+      <th></th>
+    </tr>
+    <tr>
+      <td>${fmt(data.healthInsurance)}</td>
+      <td>${fmt(data.nursingCareInsurance)}</td>
+      <td>${fmt(data.welfarePension)}</td>
+      <td>${fmt(data.employmentInsurance)}</td>
       <td></td>
     </tr>
     <tr>
       <th>所得税</th>
       <th>住民税</th>
+      <th>その他控除</th>
       <th></th>
-      <th></th>
-      <th></th>
-    </tr>
-    <tr>
-      <td>${formatCurrency(data.incomeTax)}</td>
-      <td>0</td>
-      <td></td>
-      <td></td>
-      <td></td>
-    </tr>
-    <tr>
-      <th style="border-bottom: none;"></th>
-      <th style="border-bottom: none;"></th>
-      <th style="border-bottom: none;"></th>
-      <th style="border-bottom: none;"></th>
       <th>控除額合計</th>
     </tr>
     <tr>
-      <td style="border-top: none;"></td>
-      <td style="border-top: none;"></td>
-      <td style="border-top: none;"></td>
-      <td style="border-top: none;"></td>
-      <td>${formatCurrency(data.totalDeductions)}</td>
+      <td>${fmt(data.incomeTax)}</td>
+      <td>${fmt(data.residentTax)}</td>
+      <td>${fmt(data.otherDeductions)}</td>
+      <td></td>
+      <td class="total-cell">${fmt(data.totalDeductions)}</td>
     </tr>
   </table>
 
-  <table class="main-table" style="margin-bottom: 20px;">
-    <tr>
-      <th rowspan="4" class="side-th">合計</th>
-      <th style="width: 28%">社会保険合計</th>
-      <th style="width: 28%">課税対象額</th>
-      <th style="width: 13%"></th>
-      <th style="width: 13%"></th>
-      <th style="width: 13%"></th>
-    </tr>
-    <tr>
-      <td>${formatCurrency(data.socialInsurance + data.employmentInsurance)}</td>
-      <td>${formatCurrency(data.grossSalary)}</td>
-      <td></td>
-      <td></td>
-      <td></td>
-    </tr>
-    <tr>
-      <th style="border-bottom: none;"></th>
-      <th style="border-bottom: none;"></th>
-      <th>振込支給額</th>
-      <th>現金支給額</th>
-      <th>差引支給額</th>
-    </tr>
-    <tr>
-      <td style="border-top: none;"></td>
-      <td style="border-top: none;"></td>
-      <td>${formatCurrency(data.netSalary)}</td>
-      <td>0</td>
-      <td>${formatCurrency(data.netSalary)}</td>
-    </tr>
-  </table>
-
+  <!-- 合計・差引支給額 -->
+  <div class="section-title">合計</div>
   <table class="main-table">
     <tr>
-      <th class="side-th" style="height: 80px;">備考欄</th>
-      <td style="text-align: left; vertical-align: top; padding: 10px;">
-        ${data.deemedOvertimePay > 0 ? 'みなし残業手当: ' + formatCurrency(data.deemedOvertimePay) : ''}
+      <th rowspan="2" class="side-th">合計</th>
+      <th style="width: 24%">社会保険料合計</th>
+      <th style="width: 24%">総支給額</th>
+      <th style="width: 24%">控除合計</th>
+      <th style="width: 24%">差引支給額（手取）</th>
+    </tr>
+    <tr class="net-pay-row">
+      <td>${fmt(socialInsuranceTotal)}</td>
+      <td>${fmt(data.grossPay)}</td>
+      <td>${fmt(data.totalDeductions)}</td>
+      <td>${fmt(data.netPay)}</td>
+    </tr>
+  </table>
+
+  <!-- 固定残業超過・備考 -->
+  <div class="section-title">備考</div>
+  <table class="remarks-table">
+    <tr>
+      <th>固定残業超過分</th>
+      <td>
+        超過時間: ${formatMinutes(data.fixedOvertimeExcessMinutes)}　／
+        超過手当: ${fmt(data.fixedOvertimeExcessPay)} 円
       </td>
+    </tr>
+    <tr>
+      <th>備考</th>
+      <td style="height: 40px; vertical-align: top;"></td>
     </tr>
   </table>
 
@@ -400,9 +452,7 @@ export async function savePayslipPdf(data: PayslipData): Promise<string> {
 export async function generateAttendanceRecordPdfData(employeeData: any, timeEntries: any[], yearMonth: string): Promise<Buffer> {
   const [year, month] = yearMonth.split('-')
 
-  // 省略：ここでは実際のHTMLを組み立てる。労働基準法109条に則り、氏名、出勤・退勤日時、休憩時間、備考（note）などをリスト化する
   let rowsHtml = ''
-  let totalWorkTime = 0
   timeEntries.forEach(entry => {
     const date = format(new Date(entry.date), 'MM/dd')
     const clockIn = entry.clockIn ? format(new Date(entry.clockIn), 'HH:mm') : ''
@@ -466,102 +516,37 @@ export async function generateAttendanceRecordPdfData(employeeData: any, timeEnt
 }
 
 // -------------------------------------------------------------
-// シフト表PDF生成
-// -------------------------------------------------------------
-export async function generateShiftPdfData(shiftDataList: any[], yearMonth: string): Promise<Buffer> {
-  const [year, month] = yearMonth.split('-')
-
-  let htmlContent = ''
-  shiftDataList.forEach(req => {
-    let rowsHtml = ''
-    req.shiftEntries.forEach((entry: any) => {
-      const dateObj = new Date(entry.date)
-      const dayStr = `${dateObj.getDate()}日`
-      const typeStr = entry.isRest ? '<span style="color:red">公休</span>' : '出勤'
-      const timeStr = entry.isRest ? '-' : `${entry.startTime || ''} 〜 ${entry.endTime || ''}`
-      const noteStr = entry.note || ''
-
-      rowsHtml += `<tr>
-              <td>${dayStr}</td>
-              <td>${typeStr}</td>
-              <td>${timeStr}</td>
-              <td>${noteStr}</td>
-          </tr>`
-    })
-
-    htmlContent += `
-        <div class="page-break">
-            <h2>シフト表 ${year}年${month}月</h2>
-            <h3>${req.employee.name} 様 (${req.employee.employeeCode})</h3>
-            <table>
-                <thead>
-                    <tr>
-                        <th>日付</th>
-                        <th>区分</th>
-                        <th>勤務時間</th>
-                        <th>備考</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${rowsHtml}
-                </tbody>
-            </table>
-        </div>
-      `
-  })
-
-  const html = `
-    <!DOCTYPE html>
-    <html lang="ja">
-    <head>
-        <meta charset="UTF-8">
-        <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet">
-        <style>
-            body { font-family: 'Noto Sans JP', sans-serif; font-size: 12px; padding: 10mm; }
-            table { width: 100%; border-collapse: collapse; margin-top: 10px; margin-bottom: 30px; }
-            th, td { border: 1px solid #333; padding: 6px; text-align: left; }
-            th { background-color: #f1f5f9; }
-            h2, h3 { margin-bottom: 5px; }
-            .page-break { page-break-after: always; }
-        </style>
-    </head>
-    <body>
-        ${htmlContent}
-    </body>
-    </html>
-    `
-
-  const browser = await getBrowser()
-  try {
-    const page = await browser.newPage()
-    await page.setContent(html, { waitUntil: 'networkidle0' })
-    const pdf = await page.pdf({ format: 'A4', margin: { top: '10mm', bottom: '10mm', left: '10mm', right: '10mm' } })
-    return Buffer.from(pdf)
-  } finally {
-    await browser.close()
-  }
-}
-
-// -------------------------------------------------------------
 // 賃金台帳PDF生成（様式第20号準拠）
 // -------------------------------------------------------------
 export interface WageLedgerEntry {
   yearMonth: string
-  workDays: number
-  workHours: number
-  overtimeHours: number
-  holidayHours: number
-  lateNightHours: number
+  // 勤怠
+  totalWorkDays: number
+  totalWorkedMinutes: number
+  totalOvertimeMinutes: number
+  totalHolidayMinutes: number
+  totalLateNightMinutes: number
+  // 支給
   baseSalary: number
+  allowanceTotal: number
+  fixedOvertimeAllowance: number
   overtimePay: number
-  holidayPay: number
-  deemedOvertimePay: number
-  grossSalary: number
-  socialInsurance: number
+  scheduledHolidayPay: number
+  legalHolidayPay: number
+  lateNightPay: number
+  incentivePay: number
+  commutingPay: number
+  grossPay: number
+  // 控除
+  healthInsurance: number
+  nursingCareInsurance: number
+  welfarePension: number
   employmentInsurance: number
   incomeTax: number
+  residentTax: number
+  otherDeductions: number
   totalDeductions: number
-  netSalary: number
+  netPay: number
 }
 
 export interface WageLedgerData {
@@ -572,7 +557,7 @@ export interface WageLedgerData {
 }
 
 function generateWageLedgerHtml(data: WageLedgerData): string {
-  const formatCurrency = (amount: number) => amount === 0 ? '0' : amount.toLocaleString()
+  const fmt = (amount: number) => amount === 0 ? '0' : amount.toLocaleString()
 
   let jobTitle = ''
   if (data.jobType === 'CONSTRUCTION') jobTitle = '建設部門'
@@ -581,49 +566,68 @@ function generateWageLedgerHtml(data: WageLedgerData): string {
   else if (data.jobType === 'SUPPORT') jobTitle = '就労支援部門'
 
   let rowsHtml = ''
-  let totalWorkDays = 0, totalWorkHours = 0, totalOvertimeHours = 0
-  let totalHolidayHours = 0, totalLateNightHours = 0
-  let totalBaseSalary = 0, totalOvertimePay = 0, totalHolidayPay = 0
-  let totalDeemedOvertimePay = 0, totalGrossSalary = 0
-  let totalSocialInsurance = 0, totalEmploymentInsurance = 0
-  let totalIncomeTax = 0, totalDeductions = 0, totalNetSalary = 0
+
+  // 合計集計用
+  let totWorkDays = 0, totWorkedMin = 0, totOtMin = 0, totHolidayMin = 0, totLNMin = 0
+  let totBase = 0, totAllowance = 0, totFixed = 0, totOt = 0, totSchHoliday = 0
+  let totLegalHoliday = 0, totLN = 0, totIncentive = 0, totCommuting = 0, totGross = 0
+  let totHealth = 0, totNursing = 0, totPension = 0, totEmp = 0
+  let totIncome = 0, totResident = 0, totOther = 0, totDeductions = 0, totNet = 0
 
   for (const entry of data.entries) {
     const [y, m] = entry.yearMonth.split('-')
-    totalWorkDays += entry.workDays
-    totalWorkHours += entry.workHours
-    totalOvertimeHours += entry.overtimeHours
-    totalHolidayHours += entry.holidayHours
-    totalLateNightHours += entry.lateNightHours
-    totalBaseSalary += entry.baseSalary
-    totalOvertimePay += entry.overtimePay
-    totalHolidayPay += entry.holidayPay
-    totalDeemedOvertimePay += entry.deemedOvertimePay
-    totalGrossSalary += entry.grossSalary
-    totalSocialInsurance += entry.socialInsurance
-    totalEmploymentInsurance += entry.employmentInsurance
-    totalIncomeTax += entry.incomeTax
-    totalDeductions += entry.totalDeductions
-    totalNetSalary += entry.netSalary
+    totWorkDays += entry.totalWorkDays
+    totWorkedMin += entry.totalWorkedMinutes
+    totOtMin += entry.totalOvertimeMinutes
+    totHolidayMin += entry.totalHolidayMinutes
+    totLNMin += entry.totalLateNightMinutes
+    totBase += entry.baseSalary
+    totAllowance += entry.allowanceTotal
+    totFixed += entry.fixedOvertimeAllowance
+    totOt += entry.overtimePay
+    totSchHoliday += entry.scheduledHolidayPay
+    totLegalHoliday += entry.legalHolidayPay
+    totLN += entry.lateNightPay
+    totIncentive += entry.incentivePay
+    totCommuting += entry.commutingPay
+    totGross += entry.grossPay
+    totHealth += entry.healthInsurance
+    totNursing += entry.nursingCareInsurance
+    totPension += entry.welfarePension
+    totEmp += entry.employmentInsurance
+    totIncome += entry.incomeTax
+    totResident += entry.residentTax
+    totOther += entry.otherDeductions
+    totDeductions += entry.totalDeductions
+    totNet += entry.netPay
 
     rowsHtml += `
       <tr>
         <td class="period">${y}年${Number(m)}月</td>
-        <td class="num">${entry.workDays}</td>
-        <td class="num">${entry.workHours.toFixed(1)}</td>
-        <td class="num">${entry.overtimeHours.toFixed(1)}</td>
-        <td class="num">${entry.holidayHours.toFixed(1)}</td>
-        <td class="num">${entry.lateNightHours.toFixed(1)}</td>
-        <td class="money">${formatCurrency(entry.baseSalary)}</td>
-        <td class="money">${formatCurrency(entry.overtimePay)}</td>
-        <td class="money">${formatCurrency(entry.holidayPay)}</td>
-        <td class="money">${formatCurrency(entry.deemedOvertimePay)}</td>
-        <td class="money total-col">${formatCurrency(entry.grossSalary)}</td>
-        <td class="money">${formatCurrency(entry.socialInsurance)}</td>
-        <td class="money">${formatCurrency(entry.employmentInsurance)}</td>
-        <td class="money">${formatCurrency(entry.incomeTax)}</td>
-        <td class="money total-col">${formatCurrency(entry.totalDeductions)}</td>
-        <td class="money net-col">${formatCurrency(entry.netSalary)}</td>
+        <td class="num">${entry.totalWorkDays}</td>
+        <td class="num">${formatMinutes(entry.totalWorkedMinutes)}</td>
+        <td class="num">${formatMinutes(entry.totalOvertimeMinutes)}</td>
+        <td class="num">${formatMinutes(entry.totalHolidayMinutes)}</td>
+        <td class="num">${formatMinutes(entry.totalLateNightMinutes)}</td>
+        <td class="money">${fmt(entry.baseSalary)}</td>
+        <td class="money">${fmt(entry.allowanceTotal)}</td>
+        <td class="money">${fmt(entry.fixedOvertimeAllowance)}</td>
+        <td class="money">${fmt(entry.overtimePay)}</td>
+        <td class="money">${fmt(entry.scheduledHolidayPay)}</td>
+        <td class="money">${fmt(entry.legalHolidayPay)}</td>
+        <td class="money">${fmt(entry.lateNightPay)}</td>
+        <td class="money">${fmt(entry.incentivePay)}</td>
+        <td class="money">${fmt(entry.commutingPay)}</td>
+        <td class="money total-col">${fmt(entry.grossPay)}</td>
+        <td class="money">${fmt(entry.healthInsurance)}</td>
+        <td class="money">${fmt(entry.nursingCareInsurance)}</td>
+        <td class="money">${fmt(entry.welfarePension)}</td>
+        <td class="money">${fmt(entry.employmentInsurance)}</td>
+        <td class="money">${fmt(entry.incomeTax)}</td>
+        <td class="money">${fmt(entry.residentTax)}</td>
+        <td class="money">${fmt(entry.otherDeductions)}</td>
+        <td class="money total-col">${fmt(entry.totalDeductions)}</td>
+        <td class="money net-col">${fmt(entry.netPay)}</td>
       </tr>
     `
   }
@@ -632,21 +636,30 @@ function generateWageLedgerHtml(data: WageLedgerData): string {
   rowsHtml += `
     <tr class="total-row">
       <td class="period">合　計</td>
-      <td class="num">${totalWorkDays}</td>
-      <td class="num">${totalWorkHours.toFixed(1)}</td>
-      <td class="num">${totalOvertimeHours.toFixed(1)}</td>
-      <td class="num">${totalHolidayHours.toFixed(1)}</td>
-      <td class="num">${totalLateNightHours.toFixed(1)}</td>
-      <td class="money">${formatCurrency(totalBaseSalary)}</td>
-      <td class="money">${formatCurrency(totalOvertimePay)}</td>
-      <td class="money">${formatCurrency(totalHolidayPay)}</td>
-      <td class="money">${formatCurrency(totalDeemedOvertimePay)}</td>
-      <td class="money total-col">${formatCurrency(totalGrossSalary)}</td>
-      <td class="money">${formatCurrency(totalSocialInsurance)}</td>
-      <td class="money">${formatCurrency(totalEmploymentInsurance)}</td>
-      <td class="money">${formatCurrency(totalIncomeTax)}</td>
-      <td class="money total-col">${formatCurrency(totalDeductions)}</td>
-      <td class="money net-col">${formatCurrency(totalNetSalary)}</td>
+      <td class="num">${totWorkDays}</td>
+      <td class="num">${formatMinutes(totWorkedMin)}</td>
+      <td class="num">${formatMinutes(totOtMin)}</td>
+      <td class="num">${formatMinutes(totHolidayMin)}</td>
+      <td class="num">${formatMinutes(totLNMin)}</td>
+      <td class="money">${fmt(totBase)}</td>
+      <td class="money">${fmt(totAllowance)}</td>
+      <td class="money">${fmt(totFixed)}</td>
+      <td class="money">${fmt(totOt)}</td>
+      <td class="money">${fmt(totSchHoliday)}</td>
+      <td class="money">${fmt(totLegalHoliday)}</td>
+      <td class="money">${fmt(totLN)}</td>
+      <td class="money">${fmt(totIncentive)}</td>
+      <td class="money">${fmt(totCommuting)}</td>
+      <td class="money total-col">${fmt(totGross)}</td>
+      <td class="money">${fmt(totHealth)}</td>
+      <td class="money">${fmt(totNursing)}</td>
+      <td class="money">${fmt(totPension)}</td>
+      <td class="money">${fmt(totEmp)}</td>
+      <td class="money">${fmt(totIncome)}</td>
+      <td class="money">${fmt(totResident)}</td>
+      <td class="money">${fmt(totOther)}</td>
+      <td class="money total-col">${fmt(totDeductions)}</td>
+      <td class="money net-col">${fmt(totNet)}</td>
     </tr>
   `
 
@@ -660,33 +673,33 @@ function generateWageLedgerHtml(data: WageLedgerData): string {
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       font-family: 'Noto Sans JP', sans-serif;
-      font-size: 9px;
+      font-size: 8px;
       line-height: 1.3;
-      padding: 10mm;
+      padding: 8mm;
       background: white;
       color: #000;
     }
     .header {
       text-align: center;
-      margin-bottom: 15px;
+      margin-bottom: 12px;
     }
     .header h1 {
-      font-size: 20px;
+      font-size: 18px;
       font-weight: bold;
       border: 2px solid #000;
       display: inline-block;
-      padding: 8px 40px;
+      padding: 6px 36px;
       letter-spacing: 8px;
     }
     .company-name {
       text-align: right;
-      font-size: 11px;
-      margin-bottom: 10px;
+      font-size: 10px;
+      margin-bottom: 8px;
     }
     .info-section {
       display: flex;
       justify-content: space-between;
-      margin-bottom: 15px;
+      margin-bottom: 12px;
     }
     .info-table {
       border-collapse: collapse;
@@ -694,8 +707,8 @@ function generateWageLedgerHtml(data: WageLedgerData): string {
     }
     .info-table th, .info-table td {
       border: 1px solid #000;
-      padding: 4px 10px;
-      font-size: 10px;
+      padding: 3px 8px;
+      font-size: 9px;
     }
     .info-table th {
       background-color: #f0f0f0;
@@ -710,32 +723,31 @@ function generateWageLedgerHtml(data: WageLedgerData): string {
     .main-table th {
       background-color: #f0f0f0;
       border: 1px solid #000;
-      padding: 3px 2px;
+      padding: 2px 1px;
       text-align: center;
       font-weight: normal;
-      font-size: 8px;
+      font-size: 7px;
       white-space: nowrap;
     }
     .main-table td {
       border: 1px solid #000;
-      padding: 4px 3px;
-      height: 22px;
-      font-size: 9px;
+      padding: 3px 2px;
+      height: 20px;
+      font-size: 8px;
     }
     .main-table .period {
       text-align: center;
       white-space: nowrap;
-      font-size: 9px;
     }
     .main-table .num {
       text-align: right;
       font-family: monospace;
-      padding-right: 5px;
+      padding-right: 3px;
     }
     .main-table .money {
       text-align: right;
       font-family: monospace;
-      padding-right: 5px;
+      padding-right: 3px;
     }
     .main-table .total-col {
       background-color: #fafafa;
@@ -754,13 +766,13 @@ function generateWageLedgerHtml(data: WageLedgerData): string {
     }
     .category-header {
       text-align: center !important;
-      background-color: #e8e8e8 !important;
+      background-color: #e0e0e0 !important;
       font-weight: bold !important;
-      font-size: 9px !important;
+      font-size: 8px !important;
     }
     .note {
-      margin-top: 10px;
-      font-size: 8px;
+      margin-top: 8px;
+      font-size: 7px;
       color: #666;
     }
   </style>
@@ -789,26 +801,35 @@ function generateWageLedgerHtml(data: WageLedgerData): string {
   <table class="main-table">
     <thead>
       <tr>
-        <th rowspan="2" style="width: 70px;">賃金<br>計算期間</th>
+        <th rowspan="2" style="width: 58px;">賃金<br>計算期間</th>
         <th colspan="5" class="category-header">勤　怠</th>
-        <th colspan="5" class="category-header">支　給</th>
-        <th colspan="4" class="category-header">控　除</th>
-        <th rowspan="2" style="width: 70px;">差引<br>支給額</th>
+        <th colspan="10" class="category-header">支　給</th>
+        <th colspan="8" class="category-header">控　除</th>
+        <th rowspan="2" style="width: 56px;">差引<br>支給額</th>
       </tr>
       <tr>
         <th>労働<br>日数</th>
-        <th>労働<br>時間数</th>
-        <th>時間外<br>労働</th>
-        <th>休日<br>労働</th>
-        <th>深夜<br>労働</th>
+        <th>労働<br>時間</th>
+        <th>時間外</th>
+        <th>休日</th>
+        <th>深夜</th>
         <th>基本給</th>
+        <th>諸手当</th>
+        <th>固定残業</th>
         <th>時間外<br>手当</th>
-        <th>休日<br>手当</th>
-        <th>みなし<br>残業</th>
+        <th>所定休日</th>
+        <th>法定休日</th>
+        <th>深夜<br>手当</th>
+        <th>インセン<br>ティブ</th>
+        <th>通勤<br>手当</th>
         <th>総支給額</th>
-        <th>社会<br>保険料</th>
-        <th>雇用<br>保険料</th>
+        <th>健康<br>保険</th>
+        <th>介護<br>保険</th>
+        <th>厚生<br>年金</th>
+        <th>雇用<br>保険</th>
         <th>所得税</th>
+        <th>住民税</th>
+        <th>その他</th>
         <th>控除<br>合計</th>
       </tr>
     </thead>
@@ -834,115 +855,6 @@ export async function generateWageLedgerPdf(data: WageLedgerData): Promise<Buffe
       landscape: true,
       printBackground: true,
       margin: { top: '8mm', bottom: '8mm', left: '8mm', right: '8mm' },
-    })
-    return Buffer.from(pdf)
-  } finally {
-    await browser.close()
-  }
-}
-
-// -------------------------------------------------------------
-// 月次カレンダー形式シフト表PDF一括出力 (マトリックス形式)
-// -------------------------------------------------------------
-export async function generateMonthlyShiftMatrixPdfData(yearMonth: string, shiftRequests: any[]): Promise<Buffer> {
-  const [year, month] = yearMonth.split('-')
-  const startDate = new Date(Number(year), Number(month) - 1, 1)
-  const endDate = new Date(Number(year), Number(month), 0)
-  const daysInMonth = endDate.getDate()
-
-  // ヘッダー行（日付）の生成
-  let headerHtml = '<th class="name-header">氏名</th>'
-  for (let i = 1; i <= daysInMonth; i++) {
-    const d = new Date(Number(year), Number(month) - 1, i)
-    const dayNames = ['日', '月', '火', '水', '木', '金', '土']
-    const dayOfWeek = dayNames[d.getDay()]
-    const color = d.getDay() === 0 ? 'color: #dc2626;' : d.getDay() === 6 ? 'color: #2563eb;' : ''
-    headerHtml += `<th style="${color}">${i}<br><span style="font-size: 8px;">(${dayOfWeek})</span></th>`
-  }
-
-  // データ行の生成
-  let rowsHtml = ''
-  shiftRequests.forEach(req => {
-    // 日付ごとのシフトをマッピング
-    const entryMap = new Map()
-    req.shiftEntries.forEach((entry: any) => {
-      const dateStr = format(new Date(entry.date), 'yyyy-MM-dd')
-      entryMap.set(dateStr, entry)
-    })
-
-    rowsHtml += `<tr><td class="name-cell">${req.employee.name}</td>`
-
-    for (let i = 1; i <= daysInMonth; i++) {
-      const d = new Date(Number(year), Number(month) - 1, i)
-      const dateStr = format(d, 'yyyy-MM-dd')
-      const entry = entryMap.get(dateStr)
-      let cellText = ''
-      let isRest = false
-      if (entry) {
-        if (entry.isRest) {
-          cellText = '休'
-          isRest = true
-        } else if (entry.startTime && entry.endTime) {
-          const s = format(new Date(entry.startTime), 'HH:mm')
-          const e = format(new Date(entry.endTime), 'HH:mm')
-          cellText = `${s}<br>|<br>${e}`
-        }
-      }
-
-      const bgColor = isRest ? 'background-color: #fee2e2;' : ''
-      const textColor = isRest ? 'color: #dc2626;' : ''
-      rowsHtml += `<td style="${bgColor} ${textColor}">${cellText}</td>`
-    }
-    rowsHtml += '</tr>'
-  })
-
-  // 申請がない場合のメッセージ
-  if (shiftRequests.length === 0) {
-    rowsHtml = `<tr><td colspan="${daysInMonth + 1}" style="text-align: center; padding: 20px;">この月の確定済みシフト申請はありません。</td></tr>`
-  }
-
-  const html = `
-    <!DOCTYPE html>
-    <html lang="ja">
-    <head>
-        <meta charset="UTF-8">
-        <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet">
-        <style>
-            body { font-family: 'Noto Sans JP', sans-serif; font-size: 10px; padding: 5mm; }
-            h2 { text-align: center; margin-bottom: 20px; font-size: 18px; color: #1e293b; }
-            table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-            th, td { border: 1px solid #94a3b8; text-align: center; word-wrap: break-word; vertical-align: middle; }
-            th { background-color: #f1f5f9; padding: 4px 2px; font-weight: normal; font-size: 9px; }
-            .name-header { width: 80px; font-size: 11px; font-weight: bold; }
-            td { height: 40px; padding: 2px; font-size: 8px; line-height: 1.2; }
-            .name-cell { font-size: 11px; font-weight: bold; text-align: left; padding-left: 8px; }
-        </style>
-    </head>
-    <body>
-        <h2>シフト管理表（月別） ${year}年${month}月</h2>
-        <table>
-            <thead>
-                <tr>
-                    ${headerHtml}
-                </tr>
-            </thead>
-            <tbody>
-                ${rowsHtml}
-            </tbody>
-        </table>
-    </body>
-    </html>
-    `
-
-  const browser = await getBrowser()
-  try {
-    const page = await browser.newPage()
-    await page.setContent(html, { waitUntil: 'networkidle0' })
-    // A4横向きに設定
-    const pdf = await page.pdf({
-      format: 'A4',
-      landscape: true,
-      margin: { top: '10mm', bottom: '10mm', left: '10mm', right: '10mm' }
     })
     return Buffer.from(pdf)
   } finally {

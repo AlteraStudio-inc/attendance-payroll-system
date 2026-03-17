@@ -175,13 +175,17 @@ ${COMPANY_NAME}
 // メールログを作成
 export async function createEmailLog(
     payrollItemId: string,
-    employeeId: string
+    toEmail: string,
+    subject: string,
+    body: string
 ): Promise<string> {
-    const log = await prisma.emailLog.create({
+    const log = await prisma.payslipMailLog.create({
         data: {
             payrollItemId,
-            employeeId,
-            status: 'PENDING',
+            toEmail,
+            subject,
+            body,
+            status: 'pending',
         },
     })
     return log.id
@@ -189,10 +193,10 @@ export async function createEmailLog(
 
 // メールログを更新（送信成功）
 export async function markEmailSent(logId: string): Promise<void> {
-    await prisma.emailLog.update({
+    await prisma.payslipMailLog.update({
         where: { id: logId },
         data: {
-            status: 'SENT',
+            status: 'sent',
             sentAt: new Date(),
         },
     })
@@ -200,35 +204,26 @@ export async function markEmailSent(logId: string): Promise<void> {
 
 // メールログを更新（送信失敗）
 export async function markEmailFailed(logId: string, errorMessage: string): Promise<void> {
-    const log = await prisma.emailLog.findUnique({ where: { id: logId } })
-
-    await prisma.emailLog.update({
+    await prisma.payslipMailLog.update({
         where: { id: logId },
         data: {
-            status: 'FAILED',
+            status: 'failed',
             errorMessage,
-            retryCount: (log?.retryCount ?? 0) + 1,
         },
     })
 }
 
 // 未送信・失敗のメールを取得
 export async function getPendingEmails() {
-    return prisma.emailLog.findMany({
+    return prisma.payslipMailLog.findMany({
         where: {
             OR: [
-                { status: 'PENDING' },
-                { status: 'FAILED', retryCount: { lt: 3 } },
+                { status: 'pending' },
+                { status: 'failed' },
             ],
         },
         include: {
-            payrollItem: {
-                include: {
-                    employee: true,
-                    payrollRun: true,
-                },
-            },
-            employee: true,
+            payrollItem: true,
         },
     })
 }

@@ -1,91 +1,46 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
-import { verifyPassword, verifyPin, generateToken, setAuthCookie } from '@/lib/auth'
-import { createAuditLog, getIpAddress } from '@/lib/audit'
+import { loginWithEmail, loginWithEmployeeCode, generateToken, setAuthCookie } from '@/lib/auth'
+import { logAction } from '@/lib/audit'
 
 export async function POST(request: NextRequest) {
-    try {
-        const body = await request.json()
-        const { employeeCode, password, loginType } = body
+  try {
+    const body = await request.json()
+    const { email, employeeCode, password, pin, loginType } = body
 
-        if (!employeeCode || !password) {
-            return NextResponse.json(
-                { error: '従業員コードとパスワードを入力してください' },
-                { status: 400 }
-            )
-        }
-
-        // 従業員を検索
-        const employee = await prisma.employee.findUnique({
-            where: { employeeCode },
-        })
-
-        if (!employee) {
-            return NextResponse.json(
-                { error: '従業員コードまたはパスワードが正しくありません' },
-                { status: 401 }
-            )
-        }
-
-        // 在籍確認
-        if (!employee.isActive) {
-            return NextResponse.json(
-                { error: 'このアカウントは無効になっています' },
-                { status: 401 }
-            )
-        }
-
-        // パスワード/PIN検証
-        let isValid = false
-        if (loginType === 'pin') {
-            if (employee.pinHash) {
-                isValid = await verifyPin(password, employee.pinHash)
-            }
-        } else {
-            isValid = await verifyPassword(password, employee.passwordHash)
-        }
-
-        if (!isValid) {
-            return NextResponse.json(
-                { error: '従業員コードまたはパスワードが正しくありません' },
-                { status: 401 }
-            )
-        }
-
-        // JWTトークン生成
-        const token = await generateToken({
-            id: employee.id,
-            employeeCode: employee.employeeCode,
-            name: employee.name,
-            role: employee.role as 'EMPLOYEE' | 'ADMIN',
-        })
-
-        // Cookieにセット
-        await setAuthCookie(token)
-
-        // 監査ログ
-        await createAuditLog({
-            userId: employee.id,
-            action: 'LOGIN',
-            targetType: 'Employee',
-            targetId: employee.id,
-            ipAddress: getIpAddress(request),
-        })
-
-        return NextResponse.json({
-            success: true,
-            user: {
-                id: employee.id,
-                employeeCode: employee.employeeCode,
-                name: employee.name,
-                role: employee.role,
-            },
-        })
-    } catch (error) {
-        console.error('Login error:', error)
-        return NextResponse.json(
-            { error: 'エラー詳細: ' + (error instanceof Error ? error.message : String(error)) },
-            { status: 500 }
-        )
+    let user
+    if (email && password) {
+      // 管理者ログイン (email + password)
+      user = await loginWithEmail(email, password)
+    } else if (employeeCode && (password || pin)) {
+      // 従業員ログイン (employeeCode + password/pin)
+      user = await loginWithEmployeeCode(employeeCode, password || pin)
+    } else {
+      return NextResponse.json(
+        { success: false, error: { code: 'VALIDATION_ERROR', message: '認証情報が不足しています' } },
+        { status: 400 }
+      )
     }
+
+    const token = await generateToken(user)
+    await setAuthCookie(token)
+
+    await logAction(user, 'LOGIN', 'user', user.id)
+
+    return NextResponse.json({
+      success: true,
+      data: { user },
+      // Legacy compat
+      user: {
+        id: user.id,
+        employeeCode: user.employeeCode,
+        name: user.name,
+        role: user.role === 'admin' ? 'ADMIN' : 'EMPLOYEE',
+      },
+    })
+  } catch (error: any) {
+    return NextResponse.json(
+      { success: false, error: { code: 'AUTH_ERROR', message: error.message || '認証に失敗しました' } },
+      { status: 401 }
+    )
+  }
 }

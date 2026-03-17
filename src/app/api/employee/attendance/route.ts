@@ -7,6 +7,13 @@ export async function GET(request: NextRequest) {
     try {
         const user = await requireAuth()
 
+        if (!user.employeeId) {
+            return NextResponse.json(
+                { success: false, error: { code: 'NO_EMPLOYEE', message: '従業員情報が見つかりません' } },
+                { status: 403 }
+            )
+        }
+
         const { searchParams } = new URL(request.url)
         const monthStr = searchParams.get('month')
 
@@ -22,31 +29,48 @@ export async function GET(request: NextRequest) {
             endDate = endOfMonth(new Date())
         }
 
-        const entries = await prisma.timeEntry.findMany({
+        const records = await prisma.attendanceRecord.findMany({
             where: {
-                employeeId: user.id,
-                date: {
+                employeeId: user.employeeId,
+                workDate: {
                     gte: startDate,
                     lte: endDate,
                 },
             },
-            orderBy: { date: 'desc' },
+            orderBy: { workDate: 'desc' },
         })
 
         return NextResponse.json({
-            entries: entries.map((e) => ({
-                id: e.id,
-                date: e.date.toISOString(),
-                clockIn: e.clockIn.toISOString(),
-                clockOut: e.clockOut?.toISOString() ?? null,
-                isHolidayWork: e.isHolidayWork,
-                isPaidLeave: e.isPaidLeave,
-            })),
+            success: true,
+            data: {
+                records: records.map((r) => ({
+                    id: r.id,
+                    workDate: r.workDate.toISOString(),
+                    clockInAt: r.clockInAt?.toISOString() ?? null,
+                    clockOutAt: r.clockOutAt?.toISOString() ?? null,
+                    breakMinutes: r.breakMinutes,
+                    workedMinutesRaw: r.workedMinutesRaw,
+                    workedMinutesNet: r.workedMinutesNet,
+                    lateMinutes: r.lateMinutes,
+                    earlyLeaveMinutes: r.earlyLeaveMinutes,
+                    absenceMinutes: r.absenceMinutes,
+                    normalOvertimeMinutes: r.normalOvertimeMinutes,
+                    lateNightMinutes: r.lateNightMinutes,
+                    status: r.status,
+                    notes: r.notes,
+                })),
+            },
         })
     } catch (error) {
         console.error('Get employee attendance error:', error)
+        if (error instanceof Error && error.message.includes('認証')) {
+            return NextResponse.json(
+                { success: false, error: { code: 'UNAUTHORIZED', message: error.message } },
+                { status: 401 }
+            )
+        }
         return NextResponse.json(
-            { error: '勤怠の取得中にエラーが発生しました' },
+            { success: false, error: { code: 'INTERNAL_ERROR', message: '勤怠の取得中にエラーが発生しました' } },
             { status: 500 }
         )
     }

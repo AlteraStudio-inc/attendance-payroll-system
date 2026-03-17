@@ -6,36 +6,69 @@ export async function GET() {
     try {
         const user = await requireAuth()
 
+        if (!user.employeeId) {
+            return NextResponse.json(
+                { success: false, error: { code: 'NO_EMPLOYEE', message: '従業員情報が見つかりません' } },
+                { status: 403 }
+            )
+        }
+
         const payrollItems = await prisma.payrollItem.findMany({
             where: {
-                employeeId: user.id,
+                employeeId: user.employeeId,
                 payrollRun: {
-                    status: 'CONFIRMED',
+                    status: 'finalized',
                 },
             },
             include: {
-                payrollRun: true,
-            },
-            orderBy: {
                 payrollRun: {
-                    yearMonth: 'desc',
+                    select: {
+                        year: true,
+                        month: true,
+                        status: true,
+                        paymentDate: true,
+                    },
                 },
             },
+            orderBy: [
+                { payrollRun: { year: 'desc' } },
+                { payrollRun: { month: 'desc' } },
+            ],
         })
 
         return NextResponse.json({
-            payslips: payrollItems.map((item) => ({
-                id: item.id,
-                yearMonth: item.payrollRun.yearMonth,
-                grossSalary: Number(item.grossSalary),
-                netSalary: Number(item.netSalary),
-                status: item.payrollRun.status,
-            })),
+            success: true,
+            data: {
+                payslips: payrollItems.map((item) => ({
+                    id: item.id,
+                    year: item.payrollRun.year,
+                    month: item.payrollRun.month,
+                    yearMonth: `${item.payrollRun.year}-${String(item.payrollRun.month).padStart(2, '0')}`,
+                    status: item.payrollRun.status,
+                    paymentDate: item.payrollRun.paymentDate?.toISOString() ?? null,
+                    grossPay: item.grossPay,
+                    netPay: item.netPay,
+                    totalDeductions: item.totalDeductions,
+                    baseSalary: item.baseSalary,
+                    allowanceTotal: item.allowanceTotal,
+                    overtimePay: item.overtimePay,
+                    totalWorkDays: item.totalWorkDays,
+                    totalWorkedMinutes: item.totalWorkedMinutes,
+                    totalOvertimeMinutes: item.totalOvertimeMinutes,
+                    pdfFilePath: item.pdfFilePath,
+                })),
+            },
         })
     } catch (error) {
         console.error('Get payslips error:', error)
+        if (error instanceof Error && error.message.includes('認証')) {
+            return NextResponse.json(
+                { success: false, error: { code: 'UNAUTHORIZED', message: error.message } },
+                { status: 401 }
+            )
+        }
         return NextResponse.json(
-            { error: '給与明細の取得中にエラーが発生しました' },
+            { success: false, error: { code: 'INTERNAL_ERROR', message: '給与明細の取得中にエラーが発生しました' } },
             { status: 500 }
         )
     }
