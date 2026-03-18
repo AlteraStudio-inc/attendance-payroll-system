@@ -38,7 +38,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 const res = await fetch('/api/auth/me', { credentials: 'include' })
                 const data = await res.json()
 
-                const authUser = data.data || data.user
+                const authUser = data.data?.user || data.user
                 if (!res.ok || authUser?.role !== 'admin') {
                     router.push('/login')
                     return
