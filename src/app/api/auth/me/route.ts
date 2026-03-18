@@ -18,7 +18,7 @@ export async function GET() {
         id: user.id,
         employeeCode: user.employeeCode,
         name: user.name,
-        role: user.role === 'admin' ? 'ADMIN' : 'EMPLOYEE',
+        role: user.role,
         departmentId: user.departmentId,
         companyId: user.companyId,
         employeeId: user.employeeId,

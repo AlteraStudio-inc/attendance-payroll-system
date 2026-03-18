@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
         id: user.id,
         employeeCode: user.employeeCode,
         name: user.name,
-        role: user.role === 'admin' ? 'ADMIN' : 'EMPLOYEE',
+        role: user.role,
       },
     })
   } catch (error: any) {
